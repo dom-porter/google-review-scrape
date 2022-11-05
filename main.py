@@ -29,9 +29,9 @@ test = Business("Zara store UK BS1 3BX")
 # print("Get business info:")
 # print(test.getBusinessDetails())
 print("Get reviews:")
-print(test.getReviews())
+print(test.get_reviews())
 print("Get popular times:")
-print(test.getPopularTimes())
+print(test.get_popular_times())
 
 # test = Business("Strumpet store UK HP34 789P")
 
