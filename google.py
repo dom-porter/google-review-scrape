@@ -24,10 +24,11 @@ class Business:
     REVIEW_SCROLL_DIV = '//*[@id="QA0Szd"]/div/div/div[1]/div[2]/div/div[1]/div/div/div[2]'
     REVIEW_ITEM_CLASS = 'jftiEf.fontBodyMedium'
 
-    def __init__(self, address: str):
+    def __init__(self, address: str, business_ref):
         self._set_maps_driver(address)
         self._set_search_driver(address)
         self._maps_focus = MAPS_SUMMARY
+        self._business_ref = business_ref
 
     def __del__(self):
         self._maps_driver.close()
@@ -53,6 +54,7 @@ class Business:
         self._switch_to_summary()
 
         business_details = {
+            'business_ref': self._business_ref,
             'store_name': self._get_business_name(),
             'address': self._get_address(),
             'avg_rating': self._get_rating(),
@@ -115,6 +117,7 @@ class Business:
                 label_text = each_hour.get_attribute("aria-label").split()
                 if label_text[0] != 'Currently':
                     popular_time_day = {
+                        'business_ref': self._business_ref,
                         'perc_busy': label_text[0].replace("%", ''),
                         'hour_no': int(label_text[3]) if (
                                     label_text[4].upper() == "AM." or int(label_text[3]) == 12) else int(
@@ -158,6 +161,7 @@ class Business:
 
         process_count = 1
         rev_dict = {
+            'business_ref': [],
             'reviewer_name': [],
             'rating': [],
             'reviewed_dt': [],
@@ -181,6 +185,7 @@ class Business:
             review_rate = bs_item.find('span', class_='kvMYJc')["aria-label"]
             review_time = bs_item.find('span', class_='rsqaWe').text
             review_text = bs_item.find('span', class_='wiI7pd').text
+            rev_dict['business_ref'].append(self._business_ref)
             rev_dict['reviewer_name'].append(reviewer_name)
             rev_dict['rating'].append(review_rate)
             rev_dict['reviewed_dt'].append(review_time)
@@ -214,11 +219,11 @@ class Business:
     @staticmethod
     def _get_options() -> Options:
         chrome_options = Options()
-        # chrome_options.add_argument("--headless")
+        chrome_options.add_argument("--headless")
         chrome_options.add_argument("--window-size=1920x1080")
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-extensions")
-        # chrome_options.add_argument("--start-maximized")
+        chrome_options.add_argument("--start-maximized")
         return chrome_options
 
     @staticmethod
