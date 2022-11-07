@@ -24,7 +24,7 @@ class Business:
     REVIEW_SCROLL_DIV = '//*[@id="QA0Szd"]/div/div/div[1]/div[2]/div/div[1]/div/div/div[2]'
     REVIEW_ITEM_CLASS = 'jftiEf.fontBodyMedium'
 
-    def __init__(self, address: str, business_ref):
+    def __init__(self, business_ref, address: str):
         self._set_maps_driver(address)
         self._set_search_driver(address)
         self._maps_focus = MAPS_SUMMARY
@@ -32,7 +32,6 @@ class Business:
 
     def __del__(self):
         self._maps_driver.close()
-        # self._maps_driver.quit()
         self._search_driver.close()
         # self._search_driver.quit()
 
@@ -181,15 +180,11 @@ class Business:
 
             html_item = item.get_attribute("outerHTML")
             bs_item = BeautifulSoup(html_item, 'html.parser')
-            reviewer_name = bs_item.find('div', class_='d4r55').text.strip()
-            review_rate = bs_item.find('span', class_='kvMYJc')["aria-label"]
-            review_time = bs_item.find('span', class_='rsqaWe').text
-            review_text = bs_item.find('span', class_='wiI7pd').text
             rev_dict['business_ref'].append(self._business_ref)
-            rev_dict['reviewer_name'].append(reviewer_name)
-            rev_dict['rating'].append(review_rate)
-            rev_dict['reviewed_dt'].append(review_time)
-            rev_dict['review'].append(review_text)
+            rev_dict['reviewer_name'].append(bs_item.find('div', class_='d4r55').text.strip())
+            rev_dict['rating'].append(bs_item.find('span', class_='kvMYJc')["aria-label"])
+            rev_dict['reviewed_dt'].append(bs_item.find('span', class_='rsqaWe').text)
+            rev_dict['review'].append(bs_item.find('span', class_='wiI7pd').text)
             process_count += 1
         logger.debug(f"{process_count} reviews processed")
         return rev_dict
@@ -212,7 +207,7 @@ class Business:
             WebDriverWait(self._maps_driver, 100).until(
                 EC.presence_of_element_located((By.XPATH, "//h2[contains(text(), 'Photos')]")))
 
-            # Needed as menu item number change to letters moving from reviews back to summary
+            # Needed as menu item number changes to letters moving from reviews back to summary
             self._maps_driver.refresh()
             self._maps_focus = MAPS_SUMMARY
 
