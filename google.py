@@ -29,6 +29,8 @@ class Business:
         self._set_search_driver(address)
         self._maps_focus = MAPS_SUMMARY
         self._business_ref = business_ref
+        self._address = address
+        self._partial = self._check_partial_match()
 
     def __del__(self):
         self._maps_driver.close()
@@ -49,8 +51,17 @@ class Business:
         WebDriverWait(self._maps_driver, 10).until(EC.visibility_of_all_elements_located((By.NAME, "q")))
         self._consent_check(self._search_driver)
 
+    def _check_partial_match(self):
+        parent_div = self._maps_driver.find_elements(By.XPATH, "//*[text()='Partial match']")
+        if len(parent_div) > 0:
+            print(f"Partial match for {self._business_ref} - {self._address}")
+            return True
+        return False
+
     def get_business_details(self) -> dict:
         self._switch_to_summary()
+        if self._partial:
+            return None
 
         business_details = {
             'business_ref': self._business_ref,
@@ -93,6 +104,8 @@ class Business:
 
     def get_popular_times(self):
         self._switch_to_summary()
+        if self._partial:
+            return None
 
         days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
         popular_times = []
@@ -129,10 +142,14 @@ class Business:
 
     def get_reviews(self):
         self._switch_to_review()
+        if self._partial:
+            return None
 
+        print(f"[{self._business_ref}] Getting reviews...")
         count_parent = self._maps_driver.find_element(By.CLASS_NAME, "jANrlb")
         review_count = count_parent.find_element(By.XPATH, "//div[contains(text(), 'reviews')]").text.split(" ")[0]
         review_count = review_count.replace(",", "")
+        print(f"[{self._business_ref}] Review count: {review_count}")
 
         # Adjust the sort order of the reviews to most recent
         self._maps_driver.find_element(By.XPATH, "//button[@aria-label='Sort reviews']").click()
@@ -141,24 +158,43 @@ class Business:
         self._maps_driver.find_element(By.XPATH, "(//li[@role='menuitemradio'])[2]").click()
         WebDriverWait(self._maps_driver, 10).until(
             EC.visibility_of_all_elements_located((By.XPATH, self.REVIEW_SCROLL_DIV)))
+        print(f"[{self._business_ref}] Adjusted sort order")
 
+        print(f"[{self._business_ref}] Scrolling reviews div")
         scrollable_div = self._maps_driver.find_element(By.XPATH, self.REVIEW_SCROLL_DIV)
 
         if int(review_count) >= 1000:
             scroll_end = 1000
-            logger.debug(f"Total reviews exceeds 1000, script is limiting the scrape to 1000 reviews")
+            # logger.debug(f"Total reviews exceeds 1000, script is limiting the scrape to 1000 reviews")
+            print(f"[{self._business_ref}] Total reviews exceeds 1000, script is limiting the scrape to 1000 reviews")
         else:
             scroll_end = int(review_count)
 
+        scroll_end = scroll_end
         all_items = self._maps_driver.find_elements(By.CLASS_NAME, self.REVIEW_ITEM_CLASS)
-
+        loop_count = 0
+        current_count = 0
         while len(all_items) < scroll_end:
             self._maps_driver.execute_script('arguments[0].scrollTop = arguments[0].scrollHeight', scrollable_div)
             WebDriverWait(self._maps_driver, 10).until(
                 EC.visibility_of_all_elements_located((By.XPATH, self.REVIEW_SCROLL_DIV)))
             all_items = self._maps_driver.find_elements(By.CLASS_NAME, self.REVIEW_ITEM_CLASS)
 
-        process_count = 1
+            # there are instances of review total on the page does not match the number of
+            # returned reviews which causes this scroll to be infinite. This should stop it.
+            if len(all_items) == current_count:
+                loop_count += 1
+                if loop_count == 100:
+                    print(f"[{self._business_ref}] Error, unable to load additional reviews. Expected {scroll_end} but returned {len(all_items)}")
+                    break
+            else:
+                loop_count = 0
+            current_count = len(all_items)
+            # print(f"[{self._business_ref}] all_items = {len(all_items)}")
+
+        print(f"[{self._business_ref}] Finished scrolling")
+
+        process_count = 0
         rev_dict = {
             'business_ref': [],
             'reviewer_name': [],
@@ -167,6 +203,7 @@ class Business:
             'review': []}
 
         sleep(2)
+        print(f"[{self._business_ref}] Processing reviews")
         for item in all_items:
             # Check if review has been shortened then click the More button
             more_buttons = item.find_elements(By.CLASS_NAME, 'w8nwRe.kyuRq')
@@ -175,7 +212,8 @@ class Business:
                     button.click()
                     sleep(1)
                 except BaseException as e:
-                    logger.error(f"Unable to expand shortened review for {item.accessible_name}")
+                    # logger.error(f"Unable to expand shortened review for {item.accessible_name}")
+                    print(f"Unable to expand shortened review for {item.accessible_name}")
                     raise e
 
             html_item = item.get_attribute("outerHTML")
@@ -186,14 +224,15 @@ class Business:
             rev_dict['reviewed_dt'].append(bs_item.find('span', class_='rsqaWe').text)
             rev_dict['review'].append(bs_item.find('span', class_='wiI7pd').text)
             process_count += 1
-        logger.debug(f"{process_count} reviews processed")
+        # logger.debug(f"{process_count} reviews processed")
+        print(f"[{self._business_ref}] Processed reviews: {process_count}")
         return rev_dict
 
     def _switch_to_review(self):
         if self._maps_focus != MAPS_REVIEWS:
             ActionChains(self._maps_driver).move_to_element(
-                self._maps_driver.find_element(By.CLASS_NAME, "DkEaL")).perform()
-            google_reviews_link = self._maps_driver.find_element(By.CLASS_NAME, "DkEaL")
+                self._maps_driver.find_element(By.CLASS_NAME, "F7nice.mmu3tf")).perform()
+            google_reviews_link = self._maps_driver.find_element(By.CLASS_NAME, "F7nice.mmu3tf")
             google_reviews_link.click()
             WebDriverWait(self._maps_driver, 100).until(
                 EC.presence_of_element_located((By.XPATH, "//span[contains(text(), 'All reviews')]")))
