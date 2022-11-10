@@ -1,5 +1,7 @@
 import logging
+import os
 
+from dotenv import load_dotenv
 from selenium import webdriver
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.chrome.options import Options
@@ -12,7 +14,17 @@ from selenium.common.exceptions import TimeoutException
 from time import sleep, gmtime
 from bs4 import BeautifulSoup
 
+load_dotenv()  # take environment variables from .env.
+
+if str(os.environ['G_MAPS_LOG_DEBUG']).upper() == "TRUE":
+    __DEBUG__ = True
+    log_level = logging.DEBUG
+else:
+    __DEBUG__ = False
+    log_level = logging.INFO
+
 logger = logging.getLogger("google.Business")
+logger.setLevel(log_level)
 
 MAPS_SUMMARY = 1
 MAPS_REVIEWS = 2
@@ -35,7 +47,6 @@ class Business:
     def __del__(self):
         self._maps_driver.close()
         self._search_driver.close()
-        # self._search_driver.quit()
 
     def _set_maps_driver(self, address: str):
         self._maps_driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()),
@@ -54,7 +65,7 @@ class Business:
     def _check_partial_match(self):
         parent_div = self._maps_driver.find_elements(By.XPATH, "//*[text()='Partial match']")
         if len(parent_div) > 0:
-            print(f"Partial match for {self._business_ref} - {self._address}")
+            logger.error(f"Partial match for {self._business_ref} - {self._address}")
             return True
         return False
 
@@ -145,11 +156,11 @@ class Business:
         if self._partial:
             return None
 
-        print(f"[{self._business_ref}] Getting reviews...")
+        logger.info(f"[{self._business_ref}] Getting reviews...")
         count_parent = self._maps_driver.find_element(By.CLASS_NAME, "jANrlb")
         review_count = count_parent.find_element(By.XPATH, "//div[contains(text(), 'reviews')]").text.split(" ")[0]
         review_count = review_count.replace(",", "")
-        print(f"[{self._business_ref}] Review count: {review_count}")
+        logger.debug(f"[{self._business_ref}] Review count: {review_count}")
 
         # Adjust the sort order of the reviews to most recent
         self._maps_driver.find_element(By.XPATH, "//button[@aria-label='Sort reviews']").click()
@@ -158,15 +169,15 @@ class Business:
         self._maps_driver.find_element(By.XPATH, "(//li[@role='menuitemradio'])[2]").click()
         WebDriverWait(self._maps_driver, 10).until(
             EC.visibility_of_all_elements_located((By.XPATH, self.REVIEW_SCROLL_DIV)))
-        print(f"[{self._business_ref}] Adjusted sort order")
+        logger.debug(f"[{self._business_ref}] Adjusted sort order")
 
-        print(f"[{self._business_ref}] Scrolling reviews div")
+        logger.debug(f"[{self._business_ref}] Scrolling reviews div")
         scrollable_div = self._maps_driver.find_element(By.XPATH, self.REVIEW_SCROLL_DIV)
 
         if int(review_count) >= 1000:
             scroll_end = 1000
             # logger.debug(f"Total reviews exceeds 1000, script is limiting the scrape to 1000 reviews")
-            print(f"[{self._business_ref}] Total reviews exceeds 1000, script is limiting the scrape to 1000 reviews")
+            logger.info(f"[{self._business_ref}] Total reviews exceeds 1000, script is limiting the scrape to 1000 reviews")
         else:
             scroll_end = int(review_count)
 
@@ -180,19 +191,18 @@ class Business:
                 EC.visibility_of_all_elements_located((By.XPATH, self.REVIEW_SCROLL_DIV)))
             all_items = self._maps_driver.find_elements(By.CLASS_NAME, self.REVIEW_ITEM_CLASS)
 
-            # there are instances of review total on the page does not match the number of
+            # there are instances of review total on the page being more than the
             # returned reviews which causes this scroll to be infinite. This should stop it.
             if len(all_items) == current_count:
                 loop_count += 1
                 if loop_count == 100:
-                    print(f"[{self._business_ref}] Error, unable to load additional reviews. Expected {scroll_end} but returned {len(all_items)}")
+                    logger.error(f"[{self._business_ref}] Error, unable to load additional reviews. Expected {scroll_end} but returned {len(all_items)}")
                     break
             else:
                 loop_count = 0
             current_count = len(all_items)
-            # print(f"[{self._business_ref}] all_items = {len(all_items)}")
 
-        print(f"[{self._business_ref}] Finished scrolling")
+        logger.debug(f"[{self._business_ref}] Finished scrolling")
 
         process_count = 0
         rev_dict = {
@@ -203,7 +213,7 @@ class Business:
             'review': []}
 
         sleep(2)
-        print(f"[{self._business_ref}] Processing reviews")
+        logger.info(f"[{self._business_ref}] Processing reviews")
         for item in all_items:
             # Check if review has been shortened then click the More button
             more_buttons = item.find_elements(By.CLASS_NAME, 'w8nwRe.kyuRq')
@@ -213,7 +223,7 @@ class Business:
                     sleep(1)
                 except BaseException as e:
                     # logger.error(f"Unable to expand shortened review for {item.accessible_name}")
-                    print(f"Unable to expand shortened review for {item.accessible_name}")
+                    logger.error(f"Unable to expand shortened review for {item.accessible_name}")
                     raise e
 
             html_item = item.get_attribute("outerHTML")
@@ -224,8 +234,7 @@ class Business:
             rev_dict['reviewed_dt'].append(bs_item.find('span', class_='rsqaWe').text)
             rev_dict['review'].append(bs_item.find('span', class_='wiI7pd').text)
             process_count += 1
-        # logger.debug(f"{process_count} reviews processed")
-        print(f"[{self._business_ref}] Processed reviews: {process_count}")
+        logger.debug(f"{process_count} reviews processed")
         return rev_dict
 
     def _switch_to_review(self):

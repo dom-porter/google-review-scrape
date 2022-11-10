@@ -14,10 +14,33 @@ from google import Business
 
 load_dotenv()  # take environment variables from .env.
 
+if str(os.environ['G_MAPS_LOG_DEBUG']).upper() == "TRUE":
+    __DEBUG__ = True
+    log_level = logging.DEBUG
+else:
+    __DEBUG__ = False
+    log_level = logging.INFO
+
+# Configure logging
+handler = logging.handlers.RotatingFileHandler(str(os.environ['G_MAPS_LOG_NAME']),
+                                               maxBytes=int(os.environ['G_MAPS_LOG_SIZE']),
+                                               backupCount=int(os.environ['G_MAPS_LOG_COUNT']))
+
+formatter = logging.Formatter('%(asctime)s %(pathname)s %(name)-15s [%(process)s] [%(levelname)s] %(message)s')
+formatter.converter = gmtime
+handler.setFormatter(formatter)
+
+# set the root logger level to error
+logging.basicConfig(handlers=[handler],
+                    level=logging.ERROR)
+
+logger = logging.getLogger(str(os.environ['APP_NAME']))
+logger.setLevel(log_level)
+
 
 def scrape_business(_business: list):
     ref, address = _business
-    print(f"Scrape: {ref} - {address}")
+    logger.debug(f"Scrape: {ref} - {address}")
     g_maps_details = Business(ref, address)
     return pd.DataFrame(g_maps_details.get_reviews())
 
@@ -45,7 +68,7 @@ def main(_input_csv: str, _output_csv: str, _mode: int):
 
         end_time = time()
         elapsed_time = end_time - start_time
-        print(f"Elapsed run time: {round(elapsed_time/60, 2)} minutes")
+        logger.info(f"Elapsed run time: {round(elapsed_time/60, 2)} minutes")
 
 
 if __name__ == '__main__':
@@ -67,6 +90,3 @@ if __name__ == '__main__':
     except Exception as e:
         print(e)
         exit()
-
-
-
