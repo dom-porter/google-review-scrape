@@ -37,26 +37,31 @@ class Business:
     REVIEW_ITEM_CLASS = 'jftiEf.fontBodyMedium'
 
     def __init__(self, business_ref, address: str):
-        self._set_maps_driver(address)
-        self._set_search_driver(address)
-        self._maps_focus = MAPS_SUMMARY
-        self._business_ref = business_ref
-        self._address = address
-        self._partial = self._check_partial_match()
+        if business_ref and address:
+            self._set_maps_driver(address)
+            self._set_search_driver(address)
+            self._maps_focus = MAPS_SUMMARY
+            self._business_ref = business_ref
+            self._address = address
+            self._partial = self._check_partial_match()
 
     def __del__(self):
         self._maps_driver.close()
         self._search_driver.close()
 
     def _set_maps_driver(self, address: str):
-        self._maps_driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()),
+        # self._maps_driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()),
+                                             # options=self._get_options())
+        self._maps_driver = webdriver.Chrome(service=Service(),
                                              options=self._get_options())
         self._maps_driver.get(self.GOOGLE_MAPS_URL + address.replace(" ", "+"))
         WebDriverWait(self._maps_driver, 10).until(EC.visibility_of_all_elements_located((By.ID, "searchboxinput")))
         self._consent_check(self._maps_driver)
 
     def _set_search_driver(self, address: str):
-        self._search_driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()),
+        # self._search_driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()),
+                                               # options=self._get_options())
+        self._search_driver = webdriver.Chrome(service=Service(),
                                                options=self._get_options())
         self._search_driver.get(self.GOOGLE_SEARCH_URL + address.replace(" ", "+"))
         WebDriverWait(self._maps_driver, 10).until(EC.visibility_of_all_elements_located((By.NAME, "q")))
@@ -74,13 +79,15 @@ class Business:
         if self._partial:
             return None
 
+        logger.info(f"[{self._business_ref}] Getting business information...")
+
         business_details = {
             'business_ref': self._business_ref,
-            'store_name': self._get_business_name(),
+            'business_name': self._get_business_name(),
             'address': self._get_address(),
             'avg_rating': self._get_rating(),
             'total_reviews': self._get_review_total(),
-            'Service_options': self._get_service_options(),
+            'service_options': self._get_service_options(),
             'avg_time_spent': self._get_av_time_spent()
         }
         return business_details
@@ -114,6 +121,8 @@ class Business:
         return self._search_driver.find_element(By.CLASS_NAME, "ffc9Ud").text
 
     def get_popular_times(self):
+        logger.info(f"[{self._business_ref}] Getting popular times...")
+
         self._switch_to_summary()
         if self._partial:
             return None
@@ -141,7 +150,7 @@ class Business:
                 if label_text[0] != 'Currently':
                     popular_time_day = {
                         'business_ref': self._business_ref,
-                        'perc_busy': label_text[0].replace("%", ''),
+                        'percent_busy': label_text[0].replace("%", ''),
                         'hour_no': int(label_text[3]) if (
                                     label_text[4].upper() == "AM." or int(label_text[3]) == 12) else int(
                             label_text[3]) + 12,
@@ -152,57 +161,74 @@ class Business:
         return popular_times
 
     def get_reviews(self):
+        logger.info(f"[{self._business_ref}] Getting reviews...")
+
         self._switch_to_review()
         if self._partial:
             return None
 
-        logger.info(f"[{self._business_ref}] Getting reviews...")
-        count_parent = self._maps_driver.find_element(By.CLASS_NAME, "jANrlb")
-        review_count = count_parent.find_element(By.XPATH, "//div[contains(text(), 'reviews')]").text.split(" ")[0]
-        review_count = review_count.replace(",", "")
-        logger.debug(f"[{self._business_ref}] Review count: {review_count}")
+        review_count = 0
+        try:
+            count_parent = self._maps_driver.find_element(By.CLASS_NAME, "jANrlb")
+            review_count = count_parent.find_element(By.XPATH, "//div[contains(text(), 'reviews')]").text.split(" ")[0]
+            review_count = review_count.replace(",", "")
+            logger.debug(f"[{self._business_ref}] Review count: {review_count}")
+        except Exception as exp:
+            logger.exception("Error whilst reading review count")
 
-        # Adjust the sort order of the reviews to most recent
-        self._maps_driver.find_element(By.XPATH, "//button[@aria-label='Sort reviews']").click()
-        WebDriverWait(self._maps_driver, 10).until(
-            EC.visibility_of_all_elements_located((By.XPATH, "//li[@role='menuitemradio']")))
-        self._maps_driver.find_element(By.XPATH, "(//li[@role='menuitemradio'])[2]").click()
-        WebDriverWait(self._maps_driver, 10).until(
-            EC.visibility_of_all_elements_located((By.XPATH, self.REVIEW_SCROLL_DIV)))
-        logger.debug(f"[{self._business_ref}] Adjusted sort order")
-
-        logger.debug(f"[{self._business_ref}] Scrolling reviews div")
-        scrollable_div = self._maps_driver.find_element(By.XPATH, self.REVIEW_SCROLL_DIV)
-
-        if int(review_count) >= 1000:
-            scroll_end = 1000
-            # logger.debug(f"Total reviews exceeds 1000, script is limiting the scrape to 1000 reviews")
-            logger.info(f"[{self._business_ref}] Total reviews exceeds 1000, script is limiting the scrape to 1000 reviews")
-        else:
-            scroll_end = int(review_count)
-
-        scroll_end = scroll_end
-        all_items = self._maps_driver.find_elements(By.CLASS_NAME, self.REVIEW_ITEM_CLASS)
-        loop_count = 0
-        current_count = 0
-        while len(all_items) < scroll_end:
-            self._maps_driver.execute_script('arguments[0].scrollTop = arguments[0].scrollHeight', scrollable_div)
+        try:
+            # Adjust the sort order of the reviews to most recent
+            self._maps_driver.find_element(By.XPATH, "//button[@aria-label='Sort reviews']").click()
+            WebDriverWait(self._maps_driver, 10).until(
+                EC.visibility_of_all_elements_located((By.XPATH, "//div[@role='menuitemradio']")))
+            self._maps_driver.find_element(By.XPATH, "(//div[@role='menuitemradio' and @data-index='1'])").click()
             WebDriverWait(self._maps_driver, 10).until(
                 EC.visibility_of_all_elements_located((By.XPATH, self.REVIEW_SCROLL_DIV)))
-            all_items = self._maps_driver.find_elements(By.CLASS_NAME, self.REVIEW_ITEM_CLASS)
+            logger.debug(f"[{self._business_ref}] Adjusted sort order")
+        except Exception as exp:
+            logger.exception("Error whilst changing sort oder of reviews")
 
-            # there are instances of review total on the page being more than the
-            # returned reviews which causes this scroll to be infinite. This should stop it.
-            if len(all_items) == current_count:
-                loop_count += 1
-                if loop_count == 100:
-                    logger.error(f"[{self._business_ref}] Error, unable to load additional reviews. Expected {scroll_end} but returned {len(all_items)}")
-                    break
+        all_items = None
+        try:
+            logger.debug(f"[{self._business_ref}] Scrolling reviews div")
+            scrollable_div = self._maps_driver.find_element(By.XPATH, self.REVIEW_SCROLL_DIV)
+
+            if int(review_count) >= 1000:
+                scroll_end = 1000
+                # logger.debug(f"Total reviews exceeds 1000, script is limiting the scrape to 1000 reviews")
+                logger.info(
+                    f"[{self._business_ref}] Total reviews exceeds 1000, script is limiting the scrape to 1000 reviews")
             else:
-                loop_count = 0
-            current_count = len(all_items)
+                scroll_end = int(review_count)
 
-        logger.debug(f"[{self._business_ref}] Finished scrolling")
+            scroll_end = scroll_end
+            all_items = self._maps_driver.find_elements(By.CLASS_NAME, self.REVIEW_ITEM_CLASS)
+            loop_count = 0
+            current_count = 0
+            while len(all_items) < scroll_end:
+                self._maps_driver.execute_script('arguments[0].scrollTop = arguments[0].scrollHeight', scrollable_div)
+                try:
+                    WebDriverWait(self._maps_driver, 10).until(
+                        EC.visibility_of_all_elements_located((By.XPATH, self.REVIEW_SCROLL_DIV)))
+                except TimeoutException as exp:
+                    logger.exception("Timeout while scrolling review div")
+
+                all_items = self._maps_driver.find_elements(By.CLASS_NAME, self.REVIEW_ITEM_CLASS)
+
+                # there are instances of review total on the page being more than the
+                # returned reviews which causes this scroll to be infinite. This should stop it.
+                if len(all_items) == current_count:
+                    loop_count += 1
+                    if loop_count == 100:
+                        logger.error(
+                            f"[{self._business_ref}] Error, unable to load additional reviews. Expected {scroll_end} but returned {len(all_items)}")
+                        break
+                else:
+                    loop_count = 0
+                current_count = len(all_items)
+            logger.debug(f"[{self._business_ref}] Finished scrolling")
+        except Exception as exp:
+            logger.exception("Error whilst fetching reviews")
 
         process_count = 0
         rev_dict = {
@@ -239,21 +265,29 @@ class Business:
 
     def _switch_to_review(self):
         if self._maps_focus != MAPS_REVIEWS:
+            self._maps_driver.refresh()
             ActionChains(self._maps_driver).move_to_element(
-                self._maps_driver.find_element(By.CLASS_NAME, "F7nice.mmu3tf")).perform()
+                self._maps_driver.find_element(By.CLASS_NAME, "DUwDvf.fontHeadlineLarge")).perform()
             google_reviews_link = self._maps_driver.find_element(By.CLASS_NAME, "F7nice.mmu3tf")
             google_reviews_link.click()
-            WebDriverWait(self._maps_driver, 100).until(
-                EC.presence_of_element_located((By.XPATH, "//span[contains(text(), 'All reviews')]")))
-            WebDriverWait(self._maps_driver, 100).until(
-                EC.presence_of_element_located((By.CLASS_NAME, self.REVIEW_ITEM_CLASS)))
+            try:
+                WebDriverWait(self._maps_driver, 10).until(
+                    EC.presence_of_element_located((By.XPATH, "//*[contains(text(), 'All reviews')]")))
+            except TimeoutException as exp:
+                logger.exception("Timeout while loading review page")
+                self._maps_driver.save_screenshot(f"{self._business_ref}_review_screenshot.png")
+
             self._maps_focus = MAPS_REVIEWS
 
     def _switch_to_summary(self):
         if self._maps_focus != MAPS_SUMMARY:
             self._maps_driver.back()
-            WebDriverWait(self._maps_driver, 100).until(
-                EC.presence_of_element_located((By.XPATH, "//h2[contains(text(), 'Photos')]")))
+            try:
+                WebDriverWait(self._maps_driver, 100).until(
+                    EC.presence_of_element_located((By.XPATH, "//h2[contains(text(), 'Photos')]")))
+            except TimeoutException as exp:
+                logger.exception("Timeout while loading summary page")
+                self._maps_driver.save_screenshot(f"{self._business_ref}_summary_screenshot.png")
 
             # Needed as menu item number changes to letters moving from reviews back to summary
             self._maps_driver.refresh()
@@ -262,11 +296,12 @@ class Business:
     @staticmethod
     def _get_options() -> Options:
         chrome_options = Options()
-        chrome_options.add_argument("--headless")
-        chrome_options.add_argument("--window-size=1920x1080")
+        chrome_options.add_argument("--headless=chrome")
+        chrome_options.add_argument("window-size=1920x1080")
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-extensions")
         chrome_options.add_argument("--start-maximized")
+        chrome_options.add_argument("--incognito")
         return chrome_options
 
     @staticmethod
