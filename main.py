@@ -26,7 +26,7 @@ handler = logging.handlers.RotatingFileHandler(str(os.environ['G_MAPS_LOG_NAME']
                                                maxBytes=int(os.environ['G_MAPS_LOG_SIZE']),
                                                backupCount=int(os.environ['G_MAPS_LOG_COUNT']))
 
-formatter = logging.Formatter('%(asctime)s %(pathname)s %(name)-15s [%(process)s] [%(levelname)s] %(message)s')
+formatter = logging.Formatter('%(asctime)s %(pathname)s %(name)-15s [%(process)s] [%(thread)d] [%(levelname)s] %(message)s')
 formatter.converter = gmtime
 handler.setFormatter(formatter)
 
@@ -64,9 +64,12 @@ def main(_input_csv: str, _output_prefix: str, _mode: int):
             try:
                 data = future.result()
                 business_details, popular_times, reviews = data
-                all_details.append(business_details)
-                all_times.append(popular_times)
-                all_reviews.append(reviews)
+                if business_details is not None:
+                    all_details.append(business_details)
+                if popular_times is not None:
+                    all_times.append(popular_times)
+                if reviews is not None:
+                    all_reviews.append(reviews)
             except Exception as exc:
                 logger.exception("Error while processing futures")
 

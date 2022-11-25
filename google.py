@@ -59,8 +59,6 @@ class Business:
         self._consent_check(self._maps_driver)
 
     def _set_search_driver(self, address: str):
-        # self._search_driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()),
-                                               # options=self._get_options())
         self._search_driver = webdriver.Chrome(service=Service(),
                                                options=self._get_options())
         self._search_driver.get(self.GOOGLE_SEARCH_URL + address.replace(" ", "+"))
@@ -195,7 +193,6 @@ class Business:
 
             if int(review_count) >= 1000:
                 scroll_end = 1000
-                # logger.debug(f"Total reviews exceeds 1000, script is limiting the scrape to 1000 reviews")
                 logger.info(
                     f"[{self._business_ref}] Total reviews exceeds 1000, script is limiting the scrape to 1000 reviews")
             else:
@@ -248,7 +245,6 @@ class Business:
                     button.click()
                     sleep(1)
                 except BaseException as e:
-                    # logger.error(f"Unable to expand shortened review for {item.accessible_name}")
                     logger.error(f"Unable to expand shortened review for {item.accessible_name}")
                     raise e
 
