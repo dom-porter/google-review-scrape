@@ -39,28 +39,38 @@ class Business:
 
     def __init__(self, business_ref, address: str):
         if business_ref and address:
-            self._chrome_service = ChromeService(ChromeDriverManager().install())
+            # self._chrome_service = ChromeService(ChromeDriverManager().install())
+
+            self._business_ref = business_ref
+            self._address = address
+            self._maps_driver = None
+            self._search_driver = None
             self._set_maps_driver(address)
             self._set_search_driver(address)
             self._maps_focus = MAPS_SUMMARY
-            self._business_ref = business_ref
-            self._address = address
             self._partial = self._check_partial_match()
 
     def __del__(self):
-        self._maps_driver.close()
-        self._search_driver.close()
+        if self._maps_driver is not None:
+            self._maps_driver.close()
+        if self._search_driver is not None:
+            self._search_driver.close()
 
     def _set_maps_driver(self, address: str):
+        logger.debug(f"Installing and initializing maps browser for {self._business_ref}..")
         # self._maps_driver = webdriver.Chrome(service=self._chrome_service) # USED FOR TESTING. NOT HEADLESS
-        self._maps_driver = webdriver.Chrome(service=self._chrome_service, options=self._get_options())
+        self._maps_driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=self._get_options())
+
+        # self._maps_driver = webdriver.Chrome(service=self._chrome_service, options=self._get_options())
         self._maps_driver.get(self.GOOGLE_MAPS_URL + address.replace(" ", "+"))
         WebDriverWait(self._maps_driver, 10).until(EC.visibility_of_all_elements_located((By.ID, "searchboxinput")))
         self._consent_check(self._maps_driver)
+        logger.debug(f"Initialization of browser for {self._business_ref} complete")
 
     def _set_search_driver(self, address: str):
         # self._search_driver = webdriver.Chrome(service=self._chrome_service) # USED FOR TESTING. NOT HEADLESS
-        self._search_driver = webdriver.Chrome(service=self._chrome_service, options=self._get_options())
+        # self._search_driver = webdriver.Chrome(service=self._chrome_service, options=self._get_options())
+        self._search_driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=self._get_options())
 
         self._search_driver.get(self.GOOGLE_SEARCH_URL + address.replace(" ", "+"))
         WebDriverWait(self._maps_driver, 10).until(EC.visibility_of_all_elements_located((By.NAME, "q")))
@@ -283,7 +293,7 @@ class Business:
 
             try:
                 name_test = bs_item.find('div', class_='d4r55').text.strip()
-                logger.debug(f"Reviewer name: {name_test}")
+                logger.debug(f"Reviewer {name_test}")
                 rev_dict['reviewer_name'].append(bs_item.find('div', class_='d4r55').text.strip())
                 rev_dict['rating'].append(bs_item.find('span', class_='kvMYJc')["aria-label"])
                 rev_dict['reviewed_dt'].append(bs_item.find('span', class_='rsqaWe').text)
@@ -295,8 +305,9 @@ class Business:
                 rev_dict['review'].append(review)
                 process_count += 1
 
-            except Exception as e:
-                print(e)
+            except BaseException as e:
+                logger.error(f"Error getting review data")
+                logger.error(e)
 
         logger.debug(f"{process_count} reviews processed")
         return rev_dict
