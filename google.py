@@ -32,20 +32,19 @@ MAPS_REVIEWS = 2
 
 
 class Business:
-    # GOOGLE_SEARCH_URL = "https://www.google.com/search?q="
     GOOGLE_MAPS_URL = "https://www.google.com/maps?q="
     REVIEW_SCROLL_DIV = '//*[@id="QA0Szd"]/div/div/div[1]/div[2]/div/div[1]/div/div/div[2]'
     REVIEW_ITEM_CLASS = 'jftiEf.fontBodyMedium'
 
-    def __init__(self, business_ref, address: str, chrome_service):
+    def __init__(self, business_ref, address: str, chrome_driver_path):
         if business_ref and address:
             # self._chrome_service = ChromeService(ChromeDriverManager().install())
             # self._webdriver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=self._get_options())
-            self._webdriver = webdriver.Chrome(service=chrome_service, options=self._get_options())
+            # self._webdriver = webdriver.Chrome(service=chrome_service, options=self._get_options())
+            self._webdriver = webdriver.Chrome(service=ChromeService(chrome_driver_path), options=self._get_options())
 
             self._business_ref = business_ref
             self._address = address
-            # self._set_maps_driver(address)
             self._maps_focus = MAPS_SUMMARY
             self._partial = self._check_partial_match()
             self._webdriver.get(self.GOOGLE_MAPS_URL + address.replace(" ", "+"))
@@ -56,26 +55,6 @@ class Business:
         if self._webdriver is not None:
             self._webdriver.close()
 
-
-    # def _set_maps_driver(self, address: str):
-        # logger.debug(f"Installing and initializing maps browser for {self._business_ref}..")
-        # self._maps_driver = webdriver.Chrome(service=self._chrome_service) # USED FOR TESTING. NOT HEADLESS
-        # self._maps_driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=self._get_options())
-
-        # self._maps_driver = webdriver.Chrome(service=self._chrome_service, options=self._get_options())
-        # self._maps_driver.get(self.GOOGLE_MAPS_URL + address.replace(" ", "+"))
-        # WebDriverWait(self._maps_driver, 10).until(EC.visibility_of_all_elements_located((By.ID, "searchboxinput")))
-        # self._consent_check(self._maps_driver)
-        # logger.debug(f"Initialization of browser for {self._business_ref} complete")
-
-    # def _set_search_driver(self, address: str):
-        # self._search_driver = webdriver.Chrome(service=self._chrome_service) # USED FOR TESTING. NOT HEADLESS
-        # self._search_driver = webdriver.Chrome(service=self._chrome_service, options=self._get_options())
-        # self._search_driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=self._get_options())
-
-        # self._search_driver.get(self.GOOGLE_SEARCH_URL + address.replace(" ", "+"))
-        # WebDriverWait(self._maps_driver, 10).until(EC.visibility_of_all_elements_located((By.NAME, "q")))
-        # self._consent_check(self._search_driver)
 
     def _check_partial_match(self):
         parent_div = self._webdriver.find_elements(By.XPATH, "//*[text()='Partial match']")
@@ -111,7 +90,7 @@ class Business:
                                                    "//button[contains(@aria-label, 'Address')]").get_attribute(
                 "aria-label")
             return label.split(":")[1].strip()
-        except Exception as e:
+        except BaseException as e:
             logger.error(f"[{self._business_ref}] Unable to get address")
             logger.error(e)
             return "No Address"
@@ -122,18 +101,16 @@ class Business:
             rating = parent_div.find_element(By.XPATH, "//span[contains(@role, 'img')]").get_attribute(
                 "aria-label").strip()
             return rating
-        except Exception as e:
+        except BaseException as e:
             logger.error(f"[{self._business_ref}] Unable to get rating")
             logger.error(e)
             return "No rating"
 
     def _get_review_total(self) -> str:
-        # count_parent = self._maps_driver.find_element(By.CLASS_NAME, "jANrlb")
-        # review_count = count_parent.find_element(By.XPATH, "//button[contains(text(), 'Reviews')]").text.split(" ")[0]
         try:
             review_count = self._webdriver.find_element(By.XPATH, "//span[contains(@aria-label, 'reviews')]").text
             return re.sub('[()]', '', review_count)
-        except Exception as e:
+        except BaseException as e:
             logger.error(f"[{self._business_ref}] Unable to get review count")
             logger.error(e)
             return "0"
@@ -186,9 +163,18 @@ class Business:
                         }
                         popular_times.append(popular_time_day)
             return popular_times
-        except Exception as exp:
+        except BaseException as exp:
             logger.info(f"[{self._business_ref}] Unable to get popular times")
-            return ["No data available"]
+            empty_popular_times = []
+            empty_popular_time_day = {
+                'business_ref': "none",
+                'percent_busy': "none",
+                'hour_no': "none",
+                'each_hour': "none",
+                'day_of_week': "none"
+            }
+            empty_popular_times.append(empty_popular_time_day)
+            return empty_popular_times
 
     def get_reviews(self):
         logger.info(f"[{self._business_ref}] Getting reviews...")
@@ -203,12 +189,8 @@ class Business:
             parent_text = count_parent.text
             parent_text = parent_text.split("\n")[1].split(" ")[0]
             review_count = parent_text.replace(",", "")
-            # review_count = count_parent.find_element(By.XPATH, "//div[contains(text(), 'reviews')]").text.split(" ")[0]
-            # review_count = count_parent.find_element(By.XPATH, "//div[contains(text(), ' reviews')]")
-            # review_count = count_parent.find_element(By.CLASS_NAME, "fontBodySmall")
-            # review_count = review_count.replace(",", "")
             logger.debug(f"[{self._business_ref}] Review count: {review_count}")
-        except Exception as exp:
+        except BaseException as exp:
             logger.exception("Error whilst reading review count")
 
         try:
@@ -220,7 +202,7 @@ class Business:
             WebDriverWait(self._webdriver, 10).until(
                 EC.visibility_of_all_elements_located((By.XPATH, self.REVIEW_SCROLL_DIV)))
             logger.debug(f"[{self._business_ref}] Adjusted sort order")
-        except Exception as exp:
+        except BaseException as exp:
             logger.exception("Error whilst changing sort oder of reviews")
 
         all_items = None
@@ -261,7 +243,7 @@ class Business:
                     loop_count = 0
                 current_count = len(all_items)
             logger.debug(f"[{self._business_ref}] Finished scrolling")
-        except Exception as exp:
+        except BaseException as exp:
             logger.exception("Error whilst fetching reviews")
 
         process_count = 0
@@ -315,13 +297,11 @@ class Business:
             self._webdriver.refresh()
             ActionChains(self._webdriver).move_to_element(
                 self._webdriver.find_element(By.CLASS_NAME, "RWPxGd")).perform()
-            # google_reviews_link = self._maps_driver.find_element(By.CLASS_NAME, "F7nice.mmu3tf")
-            # google_reviews_link.click()
             try:
                 reviews_button = self._webdriver.find_element(By.XPATH, "//button[contains(@aria-label, 'Reviews')]")
                 if reviews_button is not None:
                     reviews_button.click()
-            except Exception as e:
+            except BaseException as e:
                 logger.error("Unable to click reviews button")
                 logger.error(e)
 
@@ -354,16 +334,12 @@ class Business:
         chrome_options = Options()
 
         prefs["intl.accept_languages"] = "en_us"
-        # chrome_options.add_experimental_option("prefs", prefs)
         chrome_options.add_argument("--headless=new")
-        # chrome_options.add_argument("window-size=1920x1080")
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-extensions")
         chrome_options.add_argument("--start-maximized")
         chrome_options.add_argument("--incognito")
-        # chrome_options.add_argument("--lang=en")
         chrome_options.add_argument("--locale=en")
-        # chrome_options.add_argument("--accept-lang=en")
         chrome_options.add_argument("force-device-scale-factor=0.5")
         return chrome_options
 

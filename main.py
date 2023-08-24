@@ -2,6 +2,7 @@ import concurrent.futures
 import logging.handlers
 import os
 import sys
+from time import sleep
 from concurrent.futures import ThreadPoolExecutor
 from time import gmtime, time
 import asyncio
@@ -63,9 +64,12 @@ def main(_input_csv: str, _output_prefix: str, _mode: int):
     all_details = []
     all_times = []
     all_reviews = []
-    chrome_service = ChromeService(ChromeDriverManager().install())
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        results_futures = {executor.submit(scrape_business, target, chrome_service): target for target in
+
+    # Do this to get round error when installing the driver + spawn a new instance of the webdriver in each thread
+    chrome_driver_path = ChromeDriverManager().install()
+
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        results_futures = {executor.submit(scrape_business, target, chrome_driver_path): target for target in
                            all_targets}
         for future in concurrent.futures.as_completed(results_futures):
             try:
