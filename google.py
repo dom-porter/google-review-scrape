@@ -37,10 +37,12 @@ class Business:
     REVIEW_SCROLL_DIV = '//*[@id="QA0Szd"]/div/div/div[1]/div[2]/div/div[1]/div/div/div[2]'
     REVIEW_ITEM_CLASS = 'jftiEf.fontBodyMedium'
 
-    def __init__(self, business_ref, address: str):
+    def __init__(self, business_ref, address: str, chrome_service):
         if business_ref and address:
             # self._chrome_service = ChromeService(ChromeDriverManager().install())
-            self._webdriver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=self._get_options())
+            # self._webdriver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=self._get_options())
+            self._webdriver = webdriver.Chrome(service=chrome_service, options=self._get_options())
+
             self._business_ref = business_ref
             self._address = address
             # self._set_maps_driver(address)

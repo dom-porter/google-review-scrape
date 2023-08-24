@@ -12,6 +12,7 @@ import pandas as pd
 from dotenv import load_dotenv
 from selenium.webdriver.chrome.service import Service as ChromeService, Service
 from webdriver_manager.chrome import ChromeDriverManager
+from selenium import webdriver
 
 from google import Business
 
@@ -42,11 +43,11 @@ logger = logging.getLogger(str(os.environ['APP_NAME']))
 logger.setLevel(log_level)
 
 
-def scrape_business(_business: str,):
+def scrape_business(_business: str, chrome_service):
     ref, address = _business.split(",")
     logger.debug(f"Scrape: {ref} - {address}")
     if ref and address:
-        g_maps_details = Business(ref, address)
+        g_maps_details = Business(ref, address, chrome_service)
         return_details = pd.DataFrame(g_maps_details.get_business_details(), index=[0])
         return_times = pd.DataFrame(g_maps_details.get_popular_times())
         return_reviews = pd.DataFrame(g_maps_details.get_reviews())
@@ -62,8 +63,9 @@ def main(_input_csv: str, _output_prefix: str, _mode: int):
     all_details = []
     all_times = []
     all_reviews = []
+    chrome_service = ChromeService(ChromeDriverManager().install())
     with ThreadPoolExecutor(max_workers=4) as executor:
-        results_futures = {executor.submit(scrape_business, target): target for target in
+        results_futures = {executor.submit(scrape_business, target, chrome_service): target for target in
                            all_targets}
         for future in concurrent.futures.as_completed(results_futures):
             try:
