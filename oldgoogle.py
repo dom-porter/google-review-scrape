@@ -32,7 +32,7 @@ MAPS_REVIEWS = 2
 
 
 class Business:
-    # GOOGLE_SEARCH_URL = "https://www.google.com/search?q="
+    GOOGLE_SEARCH_URL = "https://www.google.com/search?q="
     GOOGLE_MAPS_URL = "https://www.google.com/maps?q="
     REVIEW_SCROLL_DIV = '//*[@id="QA0Szd"]/div/div/div[1]/div[2]/div/div[1]/div/div/div[2]'
     REVIEW_ITEM_CLASS = 'jftiEf.fontBodyMedium'
@@ -43,40 +43,41 @@ class Business:
             self._webdriver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=self._get_options())
             self._business_ref = business_ref
             self._address = address
-            # self._set_maps_driver(address)
+            self._maps_driver = None
+            # self._search_driver = None
+            self._set_maps_driver(address)
+            # self._set_search_driver(address)
             self._maps_focus = MAPS_SUMMARY
             self._partial = self._check_partial_match()
-            self._webdriver.get(self.GOOGLE_MAPS_URL + address.replace(" ", "+"))
-            WebDriverWait(self._webdriver, 10).until(EC.visibility_of_all_elements_located((By.ID, "searchboxinput")))
-            self._consent_check(self._webdriver)
 
     def __del__(self):
-        if self._webdriver is not None:
-            self._webdriver.close()
+        if self._maps_driver is not None:
+            self._maps_driver.close()
+        if self._search_driver is not None:
+            self._search_driver.close()
 
-
-    # def _set_maps_driver(self, address: str):
-        # logger.debug(f"Installing and initializing maps browser for {self._business_ref}..")
+    def _set_maps_driver(self, address: str):
+        logger.debug(f"Installing and initializing maps browser for {self._business_ref}..")
         # self._maps_driver = webdriver.Chrome(service=self._chrome_service) # USED FOR TESTING. NOT HEADLESS
-        # self._maps_driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=self._get_options())
+        self._maps_driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=self._get_options())
 
         # self._maps_driver = webdriver.Chrome(service=self._chrome_service, options=self._get_options())
-        # self._maps_driver.get(self.GOOGLE_MAPS_URL + address.replace(" ", "+"))
-        # WebDriverWait(self._maps_driver, 10).until(EC.visibility_of_all_elements_located((By.ID, "searchboxinput")))
-        # self._consent_check(self._maps_driver)
-        # logger.debug(f"Initialization of browser for {self._business_ref} complete")
+        self._maps_driver.get(self.GOOGLE_MAPS_URL + address.replace(" ", "+"))
+        WebDriverWait(self._maps_driver, 10).until(EC.visibility_of_all_elements_located((By.ID, "searchboxinput")))
+        self._consent_check(self._maps_driver)
+        logger.debug(f"Initialization of browser for {self._business_ref} complete")
 
-    # def _set_search_driver(self, address: str):
+    def _set_search_driver(self, address: str):
         # self._search_driver = webdriver.Chrome(service=self._chrome_service) # USED FOR TESTING. NOT HEADLESS
         # self._search_driver = webdriver.Chrome(service=self._chrome_service, options=self._get_options())
-        # self._search_driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=self._get_options())
+        self._search_driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=self._get_options())
 
-        # self._search_driver.get(self.GOOGLE_SEARCH_URL + address.replace(" ", "+"))
-        # WebDriverWait(self._maps_driver, 10).until(EC.visibility_of_all_elements_located((By.NAME, "q")))
-        # self._consent_check(self._search_driver)
+        self._search_driver.get(self.GOOGLE_SEARCH_URL + address.replace(" ", "+"))
+        WebDriverWait(self._maps_driver, 10).until(EC.visibility_of_all_elements_located((By.NAME, "q")))
+        self._consent_check(self._search_driver)
 
     def _check_partial_match(self):
-        parent_div = self._webdriver.find_elements(By.XPATH, "//*[text()='Partial match']")
+        parent_div = self._maps_driver.find_elements(By.XPATH, "//*[text()='Partial match']")
         if len(parent_div) > 0:
             logger.error(f"Partial match for {self._business_ref} - {self._address}")
             return True
@@ -96,16 +97,17 @@ class Business:
             'avg_rating': self._get_rating(),
             'total_reviews': self._get_review_total(),
             'service_options': self._get_service_options(),
+            'avg_time_spent': self._get_av_time_spent()
         }
         return business_details
 
     def _get_business_name(self) -> str:
-        parent_div = self._webdriver.find_element(By.CLASS_NAME, "tAiQdd")
+        parent_div = self._maps_driver.find_element(By.CLASS_NAME, "tAiQdd")
         return parent_div.find_element(By.XPATH, "//h1").text
 
     def _get_address(self) -> str:
         try:
-            label = self._webdriver.find_element(By.XPATH,
+            label = self._maps_driver.find_element(By.XPATH,
                                                    "//button[contains(@aria-label, 'Address')]").get_attribute(
                 "aria-label")
             return label.split(":")[1].strip()
@@ -116,7 +118,7 @@ class Business:
 
     def _get_rating(self) -> str:
         try:
-            parent_div = self._webdriver.find_element(By.CLASS_NAME, "F7nice")
+            parent_div = self._maps_driver.find_element(By.CLASS_NAME, "F7nice")
             rating = parent_div.find_element(By.XPATH, "//span[contains(@role, 'img')]").get_attribute(
                 "aria-label").strip()
             return rating
@@ -129,7 +131,7 @@ class Business:
         # count_parent = self._maps_driver.find_element(By.CLASS_NAME, "jANrlb")
         # review_count = count_parent.find_element(By.XPATH, "//button[contains(text(), 'Reviews')]").text.split(" ")[0]
         try:
-            review_count = self._webdriver.find_element(By.XPATH, "//span[contains(@aria-label, 'reviews')]").text
+            review_count = self._maps_driver.find_element(By.XPATH, "//span[contains(@aria-label, 'reviews')]").text
             return re.sub('[()]', '', review_count)
         except Exception as e:
             logger.error(f"[{self._business_ref}] Unable to get review count")
@@ -138,11 +140,13 @@ class Business:
 
     def _get_service_options(self) -> str:
         return_str = []
-        all_options = self._webdriver.find_elements(By.CLASS_NAME, "LTs0Rc")
+        all_options = self._maps_driver.find_elements(By.CLASS_NAME, "LTs0Rc")
         for option in all_options:
             return_str.append(option.get_attribute("aria-label"))
         return ", ".join(return_str)
 
+    def _get_av_time_spent(self):
+        return self._search_driver.find_element(By.CLASS_NAME, "ffc9Ud").text
 
     def get_popular_times(self):
         logger.info(f"[{self._business_ref}] Getting popular times...")
@@ -156,19 +160,19 @@ class Business:
 
         try:
             # Scroll down to make the popular times graph visible
-            ActionChains(self._webdriver).move_to_element(
-                self._webdriver.find_element(By.CLASS_NAME, "C7xf8b")).perform()
-            popular_times_heading = self._webdriver.find_element(By.XPATH, "//h2[contains(text(), 'Popular times')]")
+            ActionChains(self._maps_driver).move_to_element(
+                self._maps_driver.find_element(By.CLASS_NAME, "C7xf8b")).perform()
+            popular_times_heading = self._maps_driver.find_element(By.XPATH, "//h2[contains(text(), 'Popular times')]")
             parent = popular_times_heading.parent
             drop_down = parent.find_element(By.CLASS_NAME, "goog-menu-button-dropdown")
 
             for day in days:
                 drop_down.click()
-                WebDriverWait(self._webdriver, 3).until(
+                WebDriverWait(self._maps_driver, 3).until(
                     EC.visibility_of_all_elements_located((By.CLASS_NAME, "goog-menuitem")))
-                option = self._webdriver.find_element(By.ID, ':' + str(days.index(day)))
+                option = self._maps_driver.find_element(By.ID, ':' + str(days.index(day)))
                 option.click()
-                graph_parent = self._webdriver.find_element(By.CLASS_NAME, "C7xf8b")
+                graph_parent = self._maps_driver.find_element(By.CLASS_NAME, "C7xf8b")
                 all_hours = graph_parent.find_elements(By.CLASS_NAME, "dpoVLd")
                 for each_hour in all_hours:
                     label_text = each_hour.get_attribute("aria-label").split()
@@ -197,7 +201,7 @@ class Business:
 
         review_count = 0
         try:
-            count_parent = self._webdriver.find_element(By.CLASS_NAME, "jANrlb")
+            count_parent = self._maps_driver.find_element(By.CLASS_NAME, "jANrlb")
             parent_text = count_parent.text
             parent_text = parent_text.split("\n")[1].split(" ")[0]
             review_count = parent_text.replace(",", "")
@@ -211,11 +215,11 @@ class Business:
 
         try:
             # Adjust the sort order of the reviews to most recent
-            self._webdriver.find_element(By.XPATH, "//button[@aria-label='Sort reviews']").click()
-            WebDriverWait(self._webdriver, 10).until(
+            self._maps_driver.find_element(By.XPATH, "//button[@aria-label='Sort reviews']").click()
+            WebDriverWait(self._maps_driver, 10).until(
                 EC.visibility_of_all_elements_located((By.XPATH, "//div[@role='menuitemradio']")))
-            self._webdriver.find_element(By.XPATH, "(//div[@role='menuitemradio' and @data-index='1'])").click()
-            WebDriverWait(self._webdriver, 10).until(
+            self._maps_driver.find_element(By.XPATH, "(//div[@role='menuitemradio' and @data-index='1'])").click()
+            WebDriverWait(self._maps_driver, 10).until(
                 EC.visibility_of_all_elements_located((By.XPATH, self.REVIEW_SCROLL_DIV)))
             logger.debug(f"[{self._business_ref}] Adjusted sort order")
         except Exception as exp:
@@ -224,7 +228,7 @@ class Business:
         all_items = None
         try:
             logger.debug(f"[{self._business_ref}] Scrolling reviews div")
-            scrollable_div = self._webdriver.find_element(By.XPATH, self.REVIEW_SCROLL_DIV)
+            scrollable_div = self._maps_driver.find_element(By.XPATH, self.REVIEW_SCROLL_DIV)
 
             if int(review_count) >= 1000:
                 scroll_end = 1000
@@ -234,18 +238,18 @@ class Business:
                 scroll_end = int(review_count)
 
             scroll_end = scroll_end
-            all_items = self._webdriver.find_elements(By.CLASS_NAME, self.REVIEW_ITEM_CLASS)
+            all_items = self._maps_driver.find_elements(By.CLASS_NAME, self.REVIEW_ITEM_CLASS)
             loop_count = 0
             current_count = 0
             while len(all_items) < scroll_end:
-                self._webdriver.execute_script('arguments[0].scrollTop = arguments[0].scrollHeight', scrollable_div)
+                self._maps_driver.execute_script('arguments[0].scrollTop = arguments[0].scrollHeight', scrollable_div)
                 try:
-                    WebDriverWait(self._webdriver, 10).until(
+                    WebDriverWait(self._maps_driver, 10).until(
                         EC.visibility_of_all_elements_located((By.XPATH, self.REVIEW_SCROLL_DIV)))
                 except TimeoutException as exp:
                     logger.exception("Timeout while scrolling review div")
 
-                all_items = self._webdriver.find_elements(By.CLASS_NAME, self.REVIEW_ITEM_CLASS)
+                all_items = self._maps_driver.find_elements(By.CLASS_NAME, self.REVIEW_ITEM_CLASS)
 
                 # there are instances of review total on the page being more than the
                 # returned reviews which causes this scroll to be infinite. This should stop it.
@@ -302,7 +306,7 @@ class Business:
                 process_count += 1
 
             except BaseException as e:
-                logger.error("Error getting review data")
+                logger.error(f"Error getting review data")
                 logger.error(e)
 
         logger.debug(f"{process_count} reviews processed")
@@ -310,13 +314,13 @@ class Business:
 
     def _switch_to_review(self):
         if self._maps_focus != MAPS_REVIEWS:
-            self._webdriver.refresh()
-            ActionChains(self._webdriver).move_to_element(
-                self._webdriver.find_element(By.CLASS_NAME, "RWPxGd")).perform()
+            self._maps_driver.refresh()
+            ActionChains(self._maps_driver).move_to_element(
+                self._maps_driver.find_element(By.CLASS_NAME, "RWPxGd")).perform()
             # google_reviews_link = self._maps_driver.find_element(By.CLASS_NAME, "F7nice.mmu3tf")
             # google_reviews_link.click()
             try:
-                reviews_button = self._webdriver.find_element(By.XPATH, "//button[contains(@aria-label, 'Reviews')]")
+                reviews_button = self._maps_driver.find_element(By.XPATH, "//button[contains(@aria-label, 'Reviews')]")
                 if reviews_button is not None:
                     reviews_button.click()
             except Exception as e:
@@ -324,26 +328,26 @@ class Business:
                 logger.error(e)
 
             try:
-                WebDriverWait(self._webdriver, 10).until(
+                WebDriverWait(self._maps_driver, 10).until(
                     EC.visibility_of_all_elements_located((By.XPATH, "//div[@role='radiogroup']")))
                 self._maps_focus = MAPS_REVIEWS
 
             except TimeoutException as exp:
                 logger.exception("Timeout while loading review page")
-                self._webdriver.save_screenshot(f"{self._business_ref}_review_screenshot.png")
+                self._maps_driver.save_screenshot(f"{self._business_ref}_review_screenshot.png")
 
     def _switch_to_summary(self):
         if self._maps_focus != MAPS_SUMMARY:
-            self._webdriver.back()
+            self._maps_driver.back()
             try:
-                WebDriverWait(self._webdriver, 100).until(
+                WebDriverWait(self._maps_driver, 100).until(
                     EC.presence_of_element_located((By.XPATH, "//h2[contains(text(), 'Photos')]")))
             except TimeoutException as exp:
                 logger.exception("Timeout while loading summary page")
-                self._webdriver.save_screenshot(f"{self._business_ref}_summary_screenshot.png")
+                self._maps_driver.save_screenshot(f"{self._business_ref}_summary_screenshot.png")
 
             # Needed as menu item number changes to letters moving from reviews back to summary
-            self._webdriver.refresh()
+            self._maps_driver.refresh()
             self._maps_focus = MAPS_SUMMARY
 
     @staticmethod
