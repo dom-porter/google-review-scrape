@@ -48,8 +48,10 @@ class Business:
             self._partial = self._check_partial_match()
 
     def __del__(self):
-        self._maps_driver.close()
-        self._search_driver.close()
+        if self._maps_driver is not None:
+            self._maps_driver.close()
+        if self._search_driver is not None:
+            self._search_driver.close()
 
     def _set_maps_driver(self, address: str):
         # self._maps_driver = webdriver.Chrome(service=self._chrome_service) # USED FOR TESTING. NOT HEADLESS
