@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 from selenium.webdriver.chrome.service import Service as ChromeService, Service
 from webdriver_manager.chrome import ChromeDriverManager
 
-from google import Business
+from async_google import Business, Business2
 
 load_dotenv()  # take environment variables from .env.
 
@@ -40,42 +40,24 @@ logging.basicConfig(handlers=[handler],
 logger = logging.getLogger(str(os.environ['APP_NAME']))
 logger.setLevel(log_level)
 
-
-def scrape_business(_business: str,):
-    ref, address = _business.split(",")
-    logger.debug(f"Scrape: {ref} - {address}")
-    if ref and address:
-        g_maps_details = Business(ref, address)
-        return_details = pd.DataFrame(g_maps_details.get_business_details(), index=[0])
-        return_times = pd.DataFrame(g_maps_details.get_popular_times())
-        return_reviews = pd.DataFrame(g_maps_details.get_reviews())
-        return return_details, return_times, return_reviews
-    else:
-        return None
-
-
-async def create_tasks(all_targets, chrome_service) -> List[Task]:
-    task_list = []
-    logger.info(f"Creating {len(all_targets)} tasks to be executed...")
-    for i in range(all_targets):
-        task = asyncio.create_task(
-            scrape_business_async(all_targets[i], chrome_service),
-            name=f"Task #{i}"
-        )
-        task_list.append(task)
-        logger.info(f"Created Task: {task}")
-    return task_list
-
+def read_file(_filename: str) -> list:
+    with open(_filename, newline='') as csvfile:
+        all_lines = [stripped for line in csvfile if (stripped := line.strip())]
+    return all_lines
 
 async def scrape_business_async(_business: str, chrome_service):
     ref, address = _business.split(",")
     logger.debug(f"Scrape: {ref} - {address}")
     if ref and address:
-        g_maps_details = Business(ref, address, chrome_service)
-        return_details = pd.DataFrame(g_maps_details.get_business_details(), index=[0])
-        return_times = pd.DataFrame(g_maps_details.get_popular_times())
-        return_reviews = pd.DataFrame(g_maps_details.get_reviews())
-        return return_details, return_times, return_reviews
+        g_maps_details = await Business2.create(ref, address, chrome_service)
+        test = await g_maps_details.get_business_details()
+        test2 = await g_maps_details.get_popular_times()
+        test3 = await g_maps_details.get_reviews()
+        # return_details = pd.DataFrame(g_maps_details.get_business_details(), index=[0])
+        # return_times = pd.DataFrame(g_maps_details.get_popular_times())
+        #return_reviews = pd.DataFrame(g_maps_details.get_reviews())
+        # return return_details, return_times, return_reviews
+        return None
     else:
         return None
 
@@ -94,21 +76,27 @@ async def async_main(_output_prefix, all_targets, chrome_service):
 
 
     data = await asyncio.gather(*task_list)
-    business_details, popular_times, reviews = data
-    all_details.append(business_details)
-    all_times.append(popular_times)
-    all_reviews.append(reviews)
+    for entry in data:
+        if entry is not None:
+            business_details, popular_times, reviews = entry
+            all_details.append(business_details)
+            all_times.append(popular_times)
+            all_reviews.append(reviews)
 
-    output_details_pt = pd.concat(all_details, ignore_index=True)
-    output_times_pt = pd.concat(all_times, ignore_index=True)
-    output_reviews_pt = pd.concat(all_reviews, ignore_index=True)
+            output_details_pt = pd.concat(all_details, ignore_index=True)
+            output_times_pt = pd.concat(all_times, ignore_index=True)
+            output_reviews_pt = pd.concat(all_reviews, ignore_index=True)
 
-    output_details_pt.to_csv(f"{_output_prefix}_details.csv", index=False)
-    output_times_pt.to_csv(f"{_output_prefix}_popular_times.csv", index=False)
-    output_reviews_pt.to_csv(f"{_output_prefix}_reviews.csv", index=False)
+            output_details_pt.to_csv(f"{_output_prefix}_details.csv", index=False)
+            output_times_pt.to_csv(f"{_output_prefix}_popular_times.csv", index=False)
+            output_reviews_pt.to_csv(f"{_output_prefix}_reviews.csv", index=False)
 
 
-def async_main(_input_csv: str, _output_prefix: str, _mode: int):
+
+
+
+
+def main(_input_csv: str, _output_prefix: str, _mode: int):
     chrome_service = ChromeService(ChromeDriverManager().install())
     all_targets = read_file(_input_csv)
     start_time = time()
@@ -137,51 +125,6 @@ def async_main(_input_csv: str, _output_prefix: str, _mode: int):
     end_time = time()
     elapsed_time = end_time - start_time
     logger.info(f"Elapsed run time: {round(elapsed_time / 60, 2)} minutes")
-
-
-
-
-def main(_input_csv: str, _output_prefix: str, _mode: int):
-    # chrome_service =ChromeService(ChromeDriverManager().install())
-    all_targets = read_file(_input_csv)
-    start_time = time()
-    all_details = []
-    all_times = []
-    all_reviews = []
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        results_futures = {executor.submit(scrape_business, target): target for target in
-                           all_targets}
-        for future in concurrent.futures.as_completed(results_futures):
-            try:
-                data = future.result()
-                business_details, popular_times, reviews = data
-                if business_details is not None:
-                    all_details.append(business_details)
-                if popular_times is not None:
-                    all_times.append(popular_times)
-                if reviews is not None:
-                    all_reviews.append(reviews)
-            except Exception as exc:
-                logger.exception("Error while processing futures")
-
-
-    output_details_pt = pd.concat(all_details, ignore_index=True)
-    output_times_pt = pd.concat(all_times, ignore_index=True)
-    output_reviews_pt = pd.concat(all_reviews, ignore_index=True)
-
-    output_details_pt.to_csv(f"{_output_prefix}_details.csv", index=False)
-    output_times_pt.to_csv(f"{_output_prefix}_popular_times.csv", index=False)
-    output_reviews_pt.to_csv(f"{_output_prefix}_reviews.csv", index=False)
-
-    end_time = time()
-    elapsed_time = end_time - start_time
-    logger.info(f"Elapsed run time: {round(elapsed_time / 60, 2)} minutes")
-
-
-def read_file(_filename: str) -> list:
-    with open(_filename, newline='') as csvfile:
-        all_lines = [stripped for line in csvfile if (stripped := line.strip())]
-    return all_lines
 
 
 if __name__ == '__main__':

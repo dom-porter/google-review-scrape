@@ -1,18 +1,19 @@
 import logging
 import os
+import re
+from time import sleep
 
+from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from selenium import webdriver
-from webdriver_manager.chrome import ChromeDriverManager
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.common.action_chains import ActionChains
 from selenium.common.exceptions import TimeoutException
-from time import sleep, gmtime
-from bs4 import BeautifulSoup
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.chrome.service import Service as ChromeService
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
+from webdriver_manager.chrome import ChromeDriverManager
 
 load_dotenv()  # take environment variables from .env.
 
@@ -38,6 +39,7 @@ class Business:
 
     def __init__(self, business_ref, address: str):
         if business_ref and address:
+            self._chrome_service = ChromeService(ChromeDriverManager().install())
             self._set_maps_driver(address)
             self._set_search_driver(address)
             self._maps_focus = MAPS_SUMMARY
@@ -50,17 +52,16 @@ class Business:
         self._search_driver.close()
 
     def _set_maps_driver(self, address: str):
-        # self._maps_driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()),
-                                             # options=self._get_options())
-        self._maps_driver = webdriver.Chrome(service=Service(),
-                                             options=self._get_options())
+        # self._maps_driver = webdriver.Chrome(service=self._chrome_service) # USED FOR TESTING. NOT HEADLESS
+        self._maps_driver = webdriver.Chrome(service=self._chrome_service, options=self._get_options())
         self._maps_driver.get(self.GOOGLE_MAPS_URL + address.replace(" ", "+"))
         WebDriverWait(self._maps_driver, 10).until(EC.visibility_of_all_elements_located((By.ID, "searchboxinput")))
         self._consent_check(self._maps_driver)
 
     def _set_search_driver(self, address: str):
-        self._search_driver = webdriver.Chrome(service=Service(),
-                                               options=self._get_options())
+        # self._search_driver = webdriver.Chrome(service=self._chrome_service) # USED FOR TESTING. NOT HEADLESS
+        self._search_driver = webdriver.Chrome(service=self._chrome_service, options=self._get_options())
+
         self._search_driver.get(self.GOOGLE_SEARCH_URL + address.replace(" ", "+"))
         WebDriverWait(self._maps_driver, 10).until(EC.visibility_of_all_elements_located((By.NAME, "q")))
         self._consent_check(self._search_driver)
@@ -95,18 +96,37 @@ class Business:
         return parent_div.find_element(By.XPATH, "//h1").text
 
     def _get_address(self) -> str:
-        label = self._maps_driver.find_element(By.XPATH, "//button[contains(@aria-label, 'Address')]").get_attribute(
-            "aria-label")
-        return label.split(":")[1].strip()
+        try:
+            label = self._maps_driver.find_element(By.XPATH,
+                                                   "//button[contains(@aria-label, 'Address')]").get_attribute(
+                "aria-label")
+            return label.split(":")[1].strip()
+        except Exception as e:
+            logger.error(f"[{self._business_ref}] Unable to get address")
+            logger.error(e)
+            return "No Address"
 
     def _get_rating(self) -> str:
-        return self._maps_driver.find_element(By.XPATH, "//span[contains(@aria-label, 'stars')]").get_attribute(
-            "aria-label").strip()
+        try:
+            parent_div = self._maps_driver.find_element(By.CLASS_NAME, "F7nice")
+            rating = parent_div.find_element(By.XPATH, "//span[contains(@role, 'img')]").get_attribute(
+                "aria-label").strip()
+            return rating
+        except Exception as e:
+            logger.error(f"[{self._business_ref}] Unable to get rating")
+            logger.error(e)
+            return "No rating"
 
     def _get_review_total(self) -> str:
-        count_parent = self._maps_driver.find_element(By.CLASS_NAME, "jANrlb")
-        review_count = count_parent.find_element(By.XPATH, "//button[contains(text(), 'reviews')]").text.split(" ")[0]
-        return review_count.replace(",", "")
+        # count_parent = self._maps_driver.find_element(By.CLASS_NAME, "jANrlb")
+        # review_count = count_parent.find_element(By.XPATH, "//button[contains(text(), 'Reviews')]").text.split(" ")[0]
+        try:
+            review_count = self._maps_driver.find_element(By.XPATH, "//span[contains(@aria-label, 'reviews')]").text
+            return re.sub('[()]', '', review_count)
+        except Exception as e:
+            logger.error(f"[{self._business_ref}] Unable to get review count")
+            logger.error(e)
+            return "0"
 
     def _get_service_options(self) -> str:
         return_str = []
@@ -128,35 +148,39 @@ class Business:
         days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
         popular_times = []
 
-        # Scroll down to make the popular times graph visible
-        ActionChains(self._maps_driver).move_to_element(
-            self._maps_driver.find_element(By.CLASS_NAME, "C7xf8b")).perform()
-        popular_times_heading = self._maps_driver.find_element(By.XPATH, "//h2[contains(text(), 'Popular times')]")
-        parent = popular_times_heading.parent
-        drop_down = parent.find_element(By.CLASS_NAME, "goog-menu-button-dropdown")
+        try:
+            # Scroll down to make the popular times graph visible
+            ActionChains(self._maps_driver).move_to_element(
+                self._maps_driver.find_element(By.CLASS_NAME, "C7xf8b")).perform()
+            popular_times_heading = self._maps_driver.find_element(By.XPATH, "//h2[contains(text(), 'Popular times')]")
+            parent = popular_times_heading.parent
+            drop_down = parent.find_element(By.CLASS_NAME, "goog-menu-button-dropdown")
 
-        for day in days:
-            drop_down.click()
-            WebDriverWait(self._maps_driver, 3).until(
-                EC.visibility_of_all_elements_located((By.CLASS_NAME, "goog-menuitem")))
-            option = self._maps_driver.find_element(By.ID, ':' + str(days.index(day)))
-            option.click()
-            graph_parent = self._maps_driver.find_element(By.CLASS_NAME, "C7xf8b")
-            all_hours = graph_parent.find_elements(By.CLASS_NAME, "dpoVLd")
-            for each_hour in all_hours:
-                label_text = each_hour.get_attribute("aria-label").split()
-                if label_text[0] != 'Currently':
-                    popular_time_day = {
-                        'business_ref': self._business_ref,
-                        'percent_busy': label_text[0].replace("%", ''),
-                        'hour_no': int(label_text[3]) if (
+            for day in days:
+                drop_down.click()
+                WebDriverWait(self._maps_driver, 3).until(
+                    EC.visibility_of_all_elements_located((By.CLASS_NAME, "goog-menuitem")))
+                option = self._maps_driver.find_element(By.ID, ':' + str(days.index(day)))
+                option.click()
+                graph_parent = self._maps_driver.find_element(By.CLASS_NAME, "C7xf8b")
+                all_hours = graph_parent.find_elements(By.CLASS_NAME, "dpoVLd")
+                for each_hour in all_hours:
+                    label_text = each_hour.get_attribute("aria-label").split()
+                    if label_text[0] != 'Currently':
+                        popular_time_day = {
+                            'business_ref': self._business_ref,
+                            'percent_busy': label_text[0].replace("%", ''),
+                            'hour_no': int(label_text[3]) if (
                                     label_text[4].upper() == "AM." or int(label_text[3]) == 12) else int(
-                            label_text[3]) + 12,
-                        'each_hour': each_hour.get_attribute('aria-label'),
-                        'day_of_week': day
-                    }
-                    popular_times.append(popular_time_day)
-        return popular_times
+                                label_text[3]) + 12,
+                            'each_hour': each_hour.get_attribute('aria-label'),
+                            'day_of_week': day
+                        }
+                        popular_times.append(popular_time_day)
+            return popular_times
+        except Exception as exp:
+            logger.info(f"[{self._business_ref}] Unable to get popular times")
+            return ["No data available"]
 
     def get_reviews(self):
         logger.info(f"[{self._business_ref}] Getting reviews...")
@@ -168,8 +192,13 @@ class Business:
         review_count = 0
         try:
             count_parent = self._maps_driver.find_element(By.CLASS_NAME, "jANrlb")
-            review_count = count_parent.find_element(By.XPATH, "//div[contains(text(), 'reviews')]").text.split(" ")[0]
-            review_count = review_count.replace(",", "")
+            parent_text = count_parent.text
+            parent_text = parent_text.split("\n")[1].split(" ")[0]
+            review_count = parent_text.replace(",", "")
+            # review_count = count_parent.find_element(By.XPATH, "//div[contains(text(), 'reviews')]").text.split(" ")[0]
+            # review_count = count_parent.find_element(By.XPATH, "//div[contains(text(), ' reviews')]")
+            # review_count = count_parent.find_element(By.CLASS_NAME, "fontBodySmall")
+            # review_count = review_count.replace(",", "")
             logger.debug(f"[{self._business_ref}] Review count: {review_count}")
         except Exception as exp:
             logger.exception("Error whilst reading review count")
@@ -251,11 +280,24 @@ class Business:
             html_item = item.get_attribute("outerHTML")
             bs_item = BeautifulSoup(html_item, 'html.parser')
             rev_dict['business_ref'].append(self._business_ref)
-            rev_dict['reviewer_name'].append(bs_item.find('div', class_='d4r55').text.strip())
-            rev_dict['rating'].append(bs_item.find('span', class_='kvMYJc')["aria-label"])
-            rev_dict['reviewed_dt'].append(bs_item.find('span', class_='rsqaWe').text)
-            rev_dict['review'].append(bs_item.find('span', class_='wiI7pd').text)
-            process_count += 1
+
+            try:
+                name_test = bs_item.find('div', class_='d4r55').text.strip()
+                logger.debug(f"Reviewer name: {name_test}")
+                rev_dict['reviewer_name'].append(bs_item.find('div', class_='d4r55').text.strip())
+                rev_dict['rating'].append(bs_item.find('span', class_='kvMYJc')["aria-label"])
+                rev_dict['reviewed_dt'].append(bs_item.find('span', class_='rsqaWe').text)
+                review = bs_item.find('span', class_='wiI7pd')
+                if review is None:
+                    review = ""
+                else:
+                    review = review.text
+                rev_dict['review'].append(review)
+                process_count += 1
+
+            except Exception as e:
+                print(e)
+
         logger.debug(f"{process_count} reviews processed")
         return rev_dict
 
@@ -263,17 +305,25 @@ class Business:
         if self._maps_focus != MAPS_REVIEWS:
             self._maps_driver.refresh()
             ActionChains(self._maps_driver).move_to_element(
-                self._maps_driver.find_element(By.CLASS_NAME, "DUwDvf.fontHeadlineLarge")).perform()
-            google_reviews_link = self._maps_driver.find_element(By.CLASS_NAME, "F7nice.mmu3tf")
-            google_reviews_link.click()
+                self._maps_driver.find_element(By.CLASS_NAME, "RWPxGd")).perform()
+            # google_reviews_link = self._maps_driver.find_element(By.CLASS_NAME, "F7nice.mmu3tf")
+            # google_reviews_link.click()
+            try:
+                reviews_button = self._maps_driver.find_element(By.XPATH, "//button[contains(@aria-label, 'Reviews')]")
+                if reviews_button is not None:
+                    reviews_button.click()
+            except Exception as e:
+                logger.error("Unable to click reviews button")
+                logger.error(e)
+
             try:
                 WebDriverWait(self._maps_driver, 10).until(
-                    EC.presence_of_element_located((By.XPATH, "//*[contains(text(), 'All reviews')]")))
+                    EC.visibility_of_all_elements_located((By.XPATH, "//div[@role='radiogroup']")))
+                self._maps_focus = MAPS_REVIEWS
+
             except TimeoutException as exp:
                 logger.exception("Timeout while loading review page")
                 self._maps_driver.save_screenshot(f"{self._business_ref}_review_screenshot.png")
-
-            self._maps_focus = MAPS_REVIEWS
 
     def _switch_to_summary(self):
         if self._maps_focus != MAPS_SUMMARY:
@@ -291,13 +341,21 @@ class Business:
 
     @staticmethod
     def _get_options() -> Options:
+        prefs = {}
         chrome_options = Options()
-        chrome_options.add_argument("--headless=chrome")
-        chrome_options.add_argument("window-size=1920x1080")
+
+        prefs["intl.accept_languages"] = "en_us"
+        # chrome_options.add_experimental_option("prefs", prefs)
+        chrome_options.add_argument("--headless=new")
+        # chrome_options.add_argument("window-size=1920x1080")
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-extensions")
         chrome_options.add_argument("--start-maximized")
         chrome_options.add_argument("--incognito")
+        # chrome_options.add_argument("--lang=en")
+        chrome_options.add_argument("--locale=en")
+        # chrome_options.add_argument("--accept-lang=en")
+        chrome_options.add_argument("force-device-scale-factor=0.5")
         return chrome_options
 
     @staticmethod
