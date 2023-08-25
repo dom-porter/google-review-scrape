@@ -34,14 +34,14 @@ class Business:
     MAPS_SUMMARY = 1
     MAPS_REVIEWS = 2
 
-    def __init__(self, business_ref, address: str, chrome_driver_path):
+    def __init__(self, business_ref, address: str, driver_path: str):
         if business_ref and address:
-            self._webdriver = webdriver.Chrome(service=ChromeService(chrome_driver_path), options=self.__get_options())
+            self._webdriver = webdriver.Chrome(service=ChromeService(driver_path), options=self.__get_options())
             self._business_ref = business_ref
             self._address = address
             self._maps_focus = self.MAPS_SUMMARY
             self._webdriver.get(self.GOOGLE_MAPS_URL + address.replace(" ", "+"))
-            WebDriverWait(self._webdriver, 10).until(EC.visibility_of_all_elements_located((By.ID, "searchboxinput")))
+            WebDriverWait(self._webdriver, timeout=10).until(EC.visibility_of_all_elements_located((By.ID, "searchboxinput")))
             self.__consent_check(self._webdriver)
             self._not_found = self._check_found()
 
@@ -51,14 +51,14 @@ class Business:
 
     def _check_found(self):
         try:
-            WebDriverWait(self._webdriver, 5).until(
+            WebDriverWait(self._webdriver, timeout=5).until(
                 EC.presence_of_element_located((By.XPATH, "//h2[contains(text(), 'Photos')]")))
             return False
-        except TimeoutException as exp:
-            logger.error(f"Timeout waiting for browser returning info for {self._business_ref}, possible no match found.")
+        except TimeoutException:
+            logger.exception(f"Timeout waiting for browser returning info for {self._business_ref}, possible no match found.")
             return True
-        except NoSuchElementException as e:
-            logger.error(f"No match for {self._business_ref}")
+        except NoSuchElementException:
+            logger.exception(f"No match for {self._business_ref}")
             return True
 
 
@@ -98,8 +98,7 @@ class Business:
                 "aria-label")
             return label.split(":")[1].strip()
         except BaseException as e:
-            logger.error(f"[{self._business_ref}] Unable to get address")
-            logger.error(e)
+            logger.exception(f"[{self._business_ref}] Unable to get address")
             return "No Address"
 
     def __get_rating(self) -> str:
@@ -109,8 +108,7 @@ class Business:
                 "aria-label").strip()
             return rating
         except BaseException as e:
-            logger.error(f"[{self._business_ref}] Unable to get rating")
-            logger.error(e)
+            logger.exception(f"[{self._business_ref}] Unable to get rating")
             return "No rating"
 
     def __get_review_total(self) -> str:
@@ -118,8 +116,7 @@ class Business:
             review_count = self._webdriver.find_element(By.XPATH, "//span[contains(@aria-label, 'reviews')]").text
             return re.sub('[()]', '', review_count)
         except BaseException as e:
-            logger.error(f"[{self._business_ref}] Unable to get review count")
-            logger.error(e)
+            logger.exception(f"[{self._business_ref}] Unable to get review count")
             return "0"
 
     def __get_service_options(self) -> str:
@@ -157,7 +154,7 @@ class Business:
 
             for day in days:
                 drop_down.click()
-                WebDriverWait(self._webdriver, 3).until(
+                WebDriverWait(self._webdriver, timeout=3).until(
                     EC.visibility_of_all_elements_located((By.CLASS_NAME, "goog-menuitem")))
                 option = self._webdriver.find_element(By.ID, ':' + str(days.index(day)))
                 option.click()
@@ -177,8 +174,8 @@ class Business:
                         }
                         popular_times.append(popular_time_day)
             return popular_times
-        except BaseException as exp:
-            logger.info(f"[{self._business_ref}] Unable to get popular times")
+        except BaseException as e:
+            logger.exception(f"[{self._business_ref}] Unable to get popular times")
             empty_popular_times.append(empty_popular_time_day)
             return empty_popular_times
 
@@ -210,8 +207,7 @@ class Business:
                     button.click()
                     sleep(1)
                 except BaseException as e:
-                    logger.error(f"Unable to expand shortened review for {item.accessible_name}")
-                    logger.error(e)
+                    logger.exception(f"Unable to expand shortened review for {item.accessible_name}")
 
             html_item = item.get_attribute("outerHTML")
             bs_item = BeautifulSoup(html_item, 'html.parser')
@@ -232,8 +228,7 @@ class Business:
                 process_count += 1
 
             except BaseException as e:
-                logger.error("Error getting review data")
-                logger.error(e)
+                logger.exception("Error getting review data")
 
         logger.debug(f"{process_count} reviews processed")
         return rev_dict
@@ -246,7 +241,7 @@ class Business:
             review_count = parent_text.replace(",", "")
             logger.debug(f"[{self._business_ref}] Review count: {review_count}")
             return int(review_count)
-        except BaseException as exp:
+        except BaseException as e:
             logger.exception("Error whilst reading review count")
             return 0
 
@@ -271,7 +266,7 @@ class Business:
                 try:
                     WebDriverWait(self._webdriver, 10).until(
                         EC.visibility_of_all_elements_located((By.XPATH, self.REVIEW_SCROLL_DIV)))
-                except TimeoutException as exp:
+                except TimeoutException:
                     logger.exception("Timeout while scrolling review div")
 
                 all_items = self._webdriver.find_elements(By.CLASS_NAME, self.REVIEW_ITEM_CLASS)
@@ -289,7 +284,7 @@ class Business:
                 current_count = len(all_items)
             logger.debug(f"[{self._business_ref}] Finished scrolling")
             return all_items
-        except BaseException as exp:
+        except BaseException as e:
             logger.exception("Error whilst fetching reviews")
             return None
 
@@ -316,25 +311,24 @@ class Business:
                 if reviews_button is not None:
                     reviews_button.click()
             except BaseException as e:
-                logger.error("Unable to click reviews button")
-                logger.error(e)
+                logger.exception("Unable to click reviews button")
 
             try:
                 WebDriverWait(self._webdriver, 10).until(
                     EC.visibility_of_all_elements_located((By.XPATH, "//div[@role='radiogroup']")))
                 self._maps_focus = self.MAPS_REVIEWS
 
-            except TimeoutException as exp:
+            except TimeoutException:
                 logger.exception("Timeout while loading review page")
-                self._webdriver.save_screenshot(f"{self._business_ref}_review_screenshot.png")
+                # self._webdriver.save_screenshot(f"{self._business_ref}_review_screenshot.png")
 
     def __switch_to_summary(self):
         if self._maps_focus != self.MAPS_SUMMARY:
             self._webdriver.back()
             try:
-                WebDriverWait(self._webdriver, 10).until(
+                WebDriverWait(self._webdriver, timeout=10).until(
                     EC.presence_of_element_located((By.XPATH, "//h2[contains(text(), 'Photos')]")))
-            except TimeoutException as exp:
+            except TimeoutException:
                 logger.exception("Timeout while loading summary page")
                 # self._webdriver.save_screenshot(f"{self._business_ref}_summary_screenshot.png")
 
@@ -361,5 +355,4 @@ class Business:
                 consent = _driver.find_element(By.ID, "L2AGLb")
                 consent.click()
             except BaseException as e:
-                logger.debug("Unable to click consent accept all button")
-                raise e
+                logger.exception("Unable to click consent accept all button")

@@ -44,14 +44,15 @@ if str(os.environ['G_MAPS_LOG_DEBUG']).upper() == "TRUE":
 else:
     DEBUG = False
     log_level = logging.INFO
+
 logger.setLevel(log_level)
 
 
-def scrape_business(_business: str, chrome_service):
-    ref, address = _business.split(",")
+def scrape_business(business_details: str, driver_path: str):
+    ref, address = business_details.split(",")
     logger.debug(f"Scrape: {ref} - {address}")
     if ref and address:
-        g_maps_details = Business(ref, address, chrome_service)
+        g_maps_details = Business(ref, address, driver_path)
         return_details = pd.DataFrame(g_maps_details.get_business_details(), index=[0])
         return_times = pd.DataFrame(g_maps_details.get_popular_times())
         return_reviews = pd.DataFrame(g_maps_details.get_reviews())
@@ -60,14 +61,14 @@ def scrape_business(_business: str, chrome_service):
         return None
 
 
-def main(_input_csv: str, _output_prefix: str, _mode: int):
-    all_targets = read_file(_input_csv)
+def main(input_filename: str, prefix: str):
+    all_targets = read_file(input_filename)
     start_time = time()
     all_details = []
     all_times = []
     all_reviews = []
 
-    # Do this to get round error when installing the driver + spawn a new instance of the webdriver in each thread
+    # Do this to get round permissions error when installing the driver + spawn a new instance of the webdriver in each thread
     chrome_driver_path = ChromeDriverManager().install()
 
     with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
@@ -83,18 +84,17 @@ def main(_input_csv: str, _output_prefix: str, _mode: int):
                     all_times.append(popular_times)
                 if reviews is not None:
                     all_reviews.append(reviews)
-            except Exception as e:
+            except Exception:
                 logger.exception("Error while processing futures")
-                logger.debug(e)
 
 
     output_details_pt = pd.concat(all_details, ignore_index=True)
     output_times_pt = pd.concat(all_times, ignore_index=True)
     output_reviews_pt = pd.concat(all_reviews, ignore_index=True)
 
-    output_details_pt.to_csv(f"{_output_prefix}_details.csv", index=False)
-    output_times_pt.to_csv(f"{_output_prefix}_popular_times.csv", index=False)
-    output_reviews_pt.to_csv(f"{_output_prefix}_reviews.csv", index=False)
+    output_details_pt.to_csv(f"{prefix}_details.csv", index=False)
+    output_times_pt.to_csv(f"{prefix}_popular_times.csv", index=False)
+    output_reviews_pt.to_csv(f"{prefix}_reviews.csv", index=False)
 
     end_time = time()
     elapsed_time = end_time - start_time
@@ -112,28 +112,18 @@ if __name__ == '__main__':
     if len(sys.argv) != 3:
         print(sys.argv)
         print(
-            'Enter the expected arguments <input.csv> <output file prefix>\n\nexample "python3 main.py target_details.csv 01_01_2023"\n\n')
-        # exit()
+            'Enter the expected arguments <input.csv> <output file prefix>\n\nexample:\n\n python3 main.py target_details.csv 01_01_2023\n\n')
+        exit()
 
     try:
-        # input_csv = sys.argv[1]
-        # output_csv = sys.argv[2]
-        # mode = int(sys.argv[3])
+        input_csv = sys.argv[1]
+        output_prefix = sys.argv[2]
 
-        input_csv = "test.csv"
-        output_csv = "output"
-
-        # main(input_csv, output_csv, mode)
         logger.info("==================== Google Business Scrape 2.4 ====================")
         logger.info(f"Input file: {input_csv}")
-        logger.info(f"Output file prefix: {output_csv}")
-        main(input_csv, output_csv, 1)
+        logger.info(f"Output file prefix: {output_prefix}")
+        main(input_csv, output_prefix)
 
     except Exception as e:
         print(e)
         exit()
-
-# 202,Zara store UK BS1 3BX
-# 205,Zara store UK NW4 3FP
-# 206,Zara store UK WD17 2TB
-# 207,Zara store UK E20 1EJ
