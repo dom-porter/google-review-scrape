@@ -10,9 +10,8 @@ The script will read in the targeted business from a .csv file in the following 
 
 for example
 
-uk_876,Zara store UK E20 1EJ</br>
-us_675,Empire Outlets US NY 10301</br>
-us_t54,La Vega Bar US NJ 08861</br>
+us_675,Empire Outlets US NY 10301
+
 
 The [Your Ref] is for you so you can process the data as needed once you have the initial data set.
 
