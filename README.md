@@ -39,9 +39,11 @@ The script will output 3 .csv files. The [output prefix] is provided when the sc
 3.10
 ```
 
-# Install Dependencies
+# Install
 
 ```
+rename .envtemplate to .env
+
 pip install -r requirements.txt
 ```
 
