@@ -2,34 +2,29 @@ import concurrent.futures
 import logging.handlers
 import os
 import sys
-from time import sleep
 from concurrent.futures import ThreadPoolExecutor
 from time import gmtime, time
-import asyncio
-from asyncio import Task
-from typing import List
 
 import pandas as pd
 from dotenv import load_dotenv
-from selenium.webdriver.chrome.service import Service as ChromeService, Service
 from webdriver_manager.chrome import ChromeDriverManager
-from selenium import webdriver
 
 from google import Business
 
 load_dotenv()  # take environment variables from .env.
 
-if str(os.environ['G_MAPS_LOG_DEBUG']).upper() == "TRUE":
-    __DEBUG__ = True
-    log_level = logging.DEBUG
-else:
-    __DEBUG__ = False
-    log_level = logging.INFO
+MAX_THREADS = int(os.environ['G_MAP_THREADS'])
+LOG_NAME = str(os.environ['G_MAPS_LOG_NAME'])
+LOG_MAX_SIZE = int(os.environ['G_MAPS_LOG_SIZE'])
+LOG_COUNT = int(os.environ['G_MAPS_LOG_COUNT'])
+APP_NAME = "google.business.scrape"
+
+
 
 # Configure logging
-handler = logging.handlers.RotatingFileHandler(str(os.environ['G_MAPS_LOG_NAME']),
-                                               maxBytes=int(os.environ['G_MAPS_LOG_SIZE']),
-                                               backupCount=int(os.environ['G_MAPS_LOG_COUNT']),
+handler = logging.handlers.RotatingFileHandler(LOG_NAME,
+                                               maxBytes=LOG_MAX_SIZE,
+                                               backupCount=LOG_COUNT,
                                                encoding="utf-8")
 
 formatter = logging.Formatter('%(asctime)s %(pathname)s %(name)-15s [%(process)s] [%(thread)d] [%(levelname)s] %(message)s')
@@ -40,7 +35,15 @@ handler.setFormatter(formatter)
 logging.basicConfig(handlers=[handler],
                     level=logging.ERROR)
 
-logger = logging.getLogger(str(os.environ['APP_NAME']))
+logger = logging.getLogger(APP_NAME)
+
+if str(os.environ['G_MAPS_LOG_DEBUG']).upper() == "TRUE":
+    logger.info("Debug logging enabled")
+    DEBUG = True
+    log_level = logging.DEBUG
+else:
+    DEBUG = False
+    log_level = logging.INFO
 logger.setLevel(log_level)
 
 
@@ -58,7 +61,6 @@ def scrape_business(_business: str, chrome_service):
 
 
 def main(_input_csv: str, _output_prefix: str, _mode: int):
-    # chrome_service =ChromeService(ChromeDriverManager().install())
     all_targets = read_file(_input_csv)
     start_time = time()
     all_details = []
@@ -68,7 +70,7 @@ def main(_input_csv: str, _output_prefix: str, _mode: int):
     # Do this to get round error when installing the driver + spawn a new instance of the webdriver in each thread
     chrome_driver_path = ChromeDriverManager().install()
 
-    with ThreadPoolExecutor(max_workers=3) as executor:
+    with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
         results_futures = {executor.submit(scrape_business, target, chrome_driver_path): target for target in
                            all_targets}
         for future in concurrent.futures.as_completed(results_futures):
@@ -81,9 +83,9 @@ def main(_input_csv: str, _output_prefix: str, _mode: int):
                     all_times.append(popular_times)
                 if reviews is not None:
                     all_reviews.append(reviews)
-            except Exception as exc:
+            except Exception as e:
                 logger.exception("Error while processing futures")
-                logger.debug(exc)
+                logger.debug(e)
 
 
     output_details_pt = pd.concat(all_details, ignore_index=True)
@@ -107,10 +109,10 @@ def read_file(_filename: str) -> list:
 
 if __name__ == '__main__':
 
-    if len(sys.argv) != 4:
+    if len(sys.argv) != 3:
         print(sys.argv)
         print(
-            'Enter the expected arguments <input.csv> <output.csv <mode>\n\nexample "python3 main.py target_details.csv reviews.csv 3"\n\n')
+            'Enter the expected arguments <input.csv> <output file prefix>\n\nexample "python3 main.py target_details.csv 01_01_2023"\n\n')
         # exit()
 
     try:
@@ -122,7 +124,7 @@ if __name__ == '__main__':
         output_csv = "output"
 
         # main(input_csv, output_csv, mode)
-        logger.info("==================== Google Business Scrape 1.0 ====================")
+        logger.info("==================== Google Business Scrape 2.4 ====================")
         logger.info(f"Input file: {input_csv}")
         logger.info(f"Output file prefix: {output_csv}")
         main(input_csv, output_csv, 1)
