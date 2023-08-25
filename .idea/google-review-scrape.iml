@@ -5,6 +5,9 @@
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
+  <component name="PackageRequirementsSettings">
+    <option name="versionSpecifier" value="Strong equality (==x.y.z)" />
+  </component>
   <component name="SonarLintModuleSettings">
     <option name="uniqueId" value="bbdfd686-97ea-4a5c-83f9-98cf8797cdd2" />
   </component>
