@@ -19,8 +19,6 @@ LOG_MAX_SIZE = int(os.environ['G_MAPS_LOG_SIZE'])
 LOG_COUNT = int(os.environ['G_MAPS_LOG_COUNT'])
 APP_NAME = "google.business.scrape"
 
-
-
 # Configure logging
 handler = logging.handlers.RotatingFileHandler(LOG_NAME,
                                                maxBytes=LOG_MAX_SIZE,
@@ -86,7 +84,6 @@ def main(input_filename: str, prefix: str):
                     all_reviews.append(reviews)
             except Exception:
                 logger.exception("Error while processing futures")
-
 
     output_details_pt = pd.concat(all_details, ignore_index=True)
     output_times_pt = pd.concat(all_times, ignore_index=True)
