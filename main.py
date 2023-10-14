@@ -36,7 +36,7 @@ logging.basicConfig(handlers=[handler],
 logger = logging.getLogger(APP_NAME)
 
 if str(os.environ['G_MAPS_LOG_DEBUG']).upper() == "TRUE":
-    logger.info("Debug logging enabled")
+    logger.info("Debug logging enabled.")
     DEBUG = True
     log_level = logging.DEBUG
 else:
