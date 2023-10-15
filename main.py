@@ -9,7 +9,7 @@ import pandas as pd
 from dotenv import load_dotenv
 from webdriver_manager.chrome import ChromeDriverManager
 
-from google import Business
+from gmaps.business import business_factory
 
 load_dotenv()  # take environment variables from .env.
 
@@ -25,7 +25,8 @@ handler = logging.handlers.RotatingFileHandler(LOG_NAME,
                                                backupCount=LOG_COUNT,
                                                encoding="utf-8")
 
-formatter = logging.Formatter('%(asctime)s %(pathname)s %(name)-15s [%(process)s] [%(thread)d] [%(levelname)s] %(message)s')
+formatter = logging.Formatter(
+    '%(asctime)s %(pathname)s %(name)-15s [%(process)s] [%(thread)d] [%(levelname)s] %(message)s')
 formatter.converter = gmtime
 handler.setFormatter(formatter)
 
@@ -36,7 +37,7 @@ logging.basicConfig(handlers=[handler],
 logger = logging.getLogger(APP_NAME)
 
 if str(os.environ['G_MAPS_LOG_DEBUG']).upper() == "TRUE":
-    logger.info("Debug logging enabled.")
+    logger.info("Debug logging enabled")
     DEBUG = True
     log_level = logging.DEBUG
 else:
@@ -48,13 +49,19 @@ logger.setLevel(log_level)
 
 def scrape_business(business_details: str, driver_path: str):
     ref, address = business_details.split(",")
+
     logger.debug(f"Scrape: {ref} - {address}")
     if ref and address:
-        g_maps_details = Business(ref, address, driver_path)
-        return_details = pd.DataFrame(g_maps_details.get_business_details(), index=[0])
-        return_times = pd.DataFrame(g_maps_details.get_popular_times())
-        return_reviews = pd.DataFrame(g_maps_details.get_reviews())
-        return return_details, return_times, return_reviews
+        try:
+            google_business = business_factory(ref, address, driver_path)
+            return_details = pd.DataFrame(google_business.get_details(), index=[0])
+            return_times = pd.DataFrame(google_business.get_popular_times())
+            return_reviews = pd.DataFrame(google_business.get_reviews())
+            return return_details, return_times, return_reviews
+        except Exception as e:
+            print(e)
+            logger.exception(e)
+            return None
     else:
         return None
 
@@ -66,7 +73,8 @@ def main(input_filename: str, prefix: str):
     all_times = []
     all_reviews = []
 
-    # Do this to get round permissions error when installing the driver + spawn a new instance of the webdriver in each thread
+    logger.info("Setting up chrome driver")
+    print("Setting up chrome driver")
     chrome_driver_path = ChromeDriverManager().install()
 
     with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
@@ -82,8 +90,8 @@ def main(input_filename: str, prefix: str):
                     all_times.append(popular_times)
                 if reviews is not None:
                     all_reviews.append(reviews)
-            except Exception:
-                logger.exception("Error while processing futures")
+            except Exception as e:
+                logger.exception(e)
 
     output_details_pt = pd.concat(all_details, ignore_index=True)
     output_times_pt = pd.concat(all_times, ignore_index=True)
@@ -116,7 +124,7 @@ if __name__ == '__main__':
         input_csv = sys.argv[1]
         output_prefix = sys.argv[2]
 
-        logger.info("==================== Google Business Scrape 2.4 ====================")
+        logger.info("==================== Google Business Scrape 3.0 ====================")
         logger.info(f"Input file: {input_csv}")
         logger.info(f"Output file prefix: {output_prefix}")
         main(input_csv, output_prefix)
