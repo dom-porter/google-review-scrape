@@ -1,0 +1,19 @@
+version: 25
+jobs:
+- name: github-push
+  steps:
+  - !PushRepository
+    name: github-push
+    remoteUrl: https://github.com/dom-porter/google-review-scrape.git
+    userName: dominic.porter
+    passwordSecret: access-token
+    force: false
+    condition: ALL_PREVIOUS_STEPS_WERE_SUCCESSFUL
+  triggers:
+  - !BranchUpdateTrigger
+    branches: master
+    paths: -.onedev-buildspec.yml
+  retryCondition: never
+  maxRetries: 3
+  retryDelay: 30
+  timeout: 3600
