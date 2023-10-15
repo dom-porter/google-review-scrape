@@ -63,3 +63,5 @@ pip install -r requirements.txt
 ```
 python3 main.py input.csv 01_01_2023
 ```
+## License
+Apache License Version 2.0
