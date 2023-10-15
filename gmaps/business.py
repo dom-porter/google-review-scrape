@@ -45,6 +45,10 @@ class GoogleBusiness:
         self._chrome_driver = None
         self._focus = MAPS_SUMMARY
 
+    def __del__(self):
+        if self._chrome_driver:
+            self._chrome_driver.close()
+
     def get_details(self) -> dict:
         if self.no_match:
             raise EmptyBusinessError("Unable to return details when no match returned from Google maps.")
